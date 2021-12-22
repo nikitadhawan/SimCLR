@@ -12,6 +12,16 @@ from utils import save_config_file, accuracy, save_checkpoint
 torch.manual_seed(0)
 
 
+def soft_cross_entropy(pred, soft_targets, weights=None):
+    if weights is not None:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
+                      1))
+    else:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
+
+
 class SimCLR(object):
 
     def __init__(self, stealing=False, model_to_steal=None, logdir='', *args, **kwargs):
@@ -57,6 +67,7 @@ class SimCLR(object):
 
         logits = logits / self.args.temperature
         return logits, labels
+
 
     def train(self, train_loader):
 
