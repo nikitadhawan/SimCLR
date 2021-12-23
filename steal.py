@@ -24,7 +24,9 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                          ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=200, type=int, metavar='N',
+parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
+                    help='number of epochs victim was trained with')
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N',
@@ -47,7 +49,7 @@ parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
-parser.add_argument('--num_queries', default=1000, type=int, metavar='N',
+parser.add_argument('--num_queries', default=10000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
@@ -84,7 +86,7 @@ def main():
 
     victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
-    victim_model = load_victim(args.epochs, args.dataset, victim_model,
+    victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                          device=args.device)
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
 
