@@ -2,7 +2,8 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, RegularDataset
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
+    RegularDataset
 from models.resnet_simclr import ResNetSimCLR
 from simclr import SimCLR
 from utils import load_model_to_steal
@@ -51,10 +52,13 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--num_queries', default=1000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--n-views', default=1, type=int, metavar='N',
-                            help='Number of views for contrastive learning training.')
+                    help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10', type=str, help='Pretrained SimCLR model to steal.')
-parser.add_argument('--logdir', default='test', type=str, help='Log directory to save output to.')
+parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
+                    type=str, help='Pretrained SimCLR model to steal.')
+parser.add_argument('--logdir', default='test', type=str,
+                    help='Log directory to save output to.')
+
 
 def main():
     args = parser.parse_args()
@@ -76,18 +80,24 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model_to_steal = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim).to(args.device)
-    model_to_steal = load_model_to_steal(args.folder_name, model_to_steal, device=args.device)
+    model_to_steal = ResNetSimCLR(base_model=args.arch,
+                                  out_dim=args.out_dim).to(args.device)
+    model_to_steal = load_model_to_steal(args.folder_name, model_to_steal,
+                                         device=args.device)
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
-    
-    optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader), eta_min=0,
+    optimizer = torch.optim.Adam(model.parameters(), args.lr,
+                                 weight_decay=args.weight_decay)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
+        train_loader), eta_min=0,
                                                            last_epoch=-1)
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(stealing=True, model_to_steal=model_to_steal, model=model, optimizer=optimizer, scheduler=scheduler, args=args, logdir=args.logdir)
+        simclr = SimCLR(stealing=True, model_to_steal=model_to_steal,
+                        model=model, optimizer=optimizer, scheduler=scheduler,
+                        args=args, logdir=args.logdir)
         simclr.steal(train_loader, args.num_queries)
 
 
