@@ -37,24 +37,9 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def load_victim(folder_name, model, device, discard_mlp=False):
-    def get_file_id_by_model(folder_name):
-        file_id = {
-            'resnet18_100-epochs_stl10': '14_nH2FkyKbt61cieQDiSbBVNP8-gtwgF',
-            'resnet18_100-epochs_cifar10': '1lc2aoVtrAetGn0PnTkOyFzPCIucOJq7C',
-            'resnet50_50-epochs_stl10': '1ByTKAUsdm_X7tLcii6oAEl5qFRqRMZSu'}
-        return file_id.get(folder_name, "Model not found.")
-
-    file_id = get_file_id_by_model(folder_name)
-    print("Stealing model: ", folder_name, file_id)
-
-    # download and extract model files
-    # url = 'https://drive.google.com/uc?id={}'.format(file_id)
-    # output = 'checkpoint_0100.pth.tar'
-    # gdown.download(url, output, quiet=False)
+def load_victim(epochs, dataset, model, device, discard_mlp=False):
     checkpoint = torch.load(
-        '/ssd003/home/nikita/SimCLR/runs/{}/checkpoint_0100.pth.tar'.format(
-            folder_name), map_location=device)
+        f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar')
     state_dict = checkpoint['state_dict']
 
     if discard_mlp:

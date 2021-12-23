@@ -13,16 +13,16 @@ model_names = sorted(name for name in models.__dict__
                      and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='./datasets',
+parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
-parser.add_argument('-dataset-name', default='stl10',
+parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
                     help='model architecture: ' +
                          ' | '.join(model_names) +
                          ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=12, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -38,20 +38,18 @@ parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     dest='weight_decay')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
-parser.add_argument('--disable-cuda', action='store_true',
-                    help='Disable CUDA')
 parser.add_argument('--fp16-precision', action='store_true',
                     help='Whether or not to use 16-bit precision GPU training.')
 
 parser.add_argument('--out_dim', default=128, type=int,
                     help='feature dimension (default: 128)')
-parser.add_argument('--log-every-n-steps', default=100, type=int,
+parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
 parser.add_argument('--num_queries', default=1000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=1, type=int, metavar='N',
+parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
@@ -62,9 +60,7 @@ parser.add_argument('--logdir', default='test', type=str,
 
 def main():
     args = parser.parse_args()
-    # assert args.n_views == 2, "Only two view training is supported. Please use --n-views 2."
-    # check if gpu training is available
-    if not args.disable_cuda and torch.cuda.is_available():
+    if torch.cuda.is_available():
         args.device = torch.device('cuda')
         cudnn.deterministic = True
         cudnn.benchmark = True
@@ -74,9 +70,9 @@ def main():
 
     dataset = RegularDataset(args.data)
 
-    train_dataset = dataset.get_dataset(args.dataset_name, args.n_views)
+    train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    test_dataset = dataset.get_test_dataset(args.dataset_name, args.n_views)
+    test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -88,7 +84,7 @@ def main():
 
     victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
-    victim_model = load_victim(args.folder_name, victim_model,
+    victim_model = load_victim(args.epochs, args.dataset, victim_model,
                                          device=args.device)
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
 

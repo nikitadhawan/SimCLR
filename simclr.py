@@ -31,20 +31,21 @@ class SimCLR(object):
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.writer = SummaryWriter(log_dir='runs/' + logdir)
-        os.remove(os.path.join(self.writer.log_dir, 'training.log'))
+        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+        self.stealing = stealing
+        if os.path.exists(os.path.join(self.writer.log_dir, 'training.log')):
+            os.remove(os.path.join(self.writer.log_dir, 'training.log'))
         logging.basicConfig(
             filename=os.path.join(self.writer.log_dir, 'training.log'),
             level=logging.DEBUG)
-        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
-        self.stealing = stealing
         if self.stealing:
-            self.criterion = soft_cross_entropy().to(self.args.device)
+            self.criterion = soft_cross_entropy
             self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
-
+        n = int(features.size()[0] / self.args.batch_size)
         labels = torch.cat(
-            [torch.arange(self.args.batch_size) for i in range(2)], dim=0)
+            [torch.arange(self.args.batch_size) for i in range(n)], dim=0)
         labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
         labels = labels.to(self.args.device)
 
@@ -126,7 +127,7 @@ class SimCLR(object):
 
         logging.info("Training has finished.")
         # save model checkpoints
-        checkpoint_name = 'checkpoint_{:04d}.pth.tar'.format(self.args.epochs)
+        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}.pth.tar'
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
@@ -147,7 +148,7 @@ class SimCLR(object):
 
         n_iter = 0
         logging.info(f"Start SimCLR stealing for {self.args.epochs} epochs.")
-        logging.info(f"Training with gpu: {self.args.disable_cuda}.")
+        logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
 
         total_queries = 0
 
@@ -162,6 +163,8 @@ class SimCLR(object):
                     features = self.model(images)
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
+                    print("shape1", logits.size())    # Need to check this. It is currently 1024x1023.
+                    print("2", labels.size())
                     loss = self.criterion(logits, labels)
 
                 self.optimizer.zero_grad()
