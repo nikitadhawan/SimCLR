@@ -37,7 +37,7 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def load_model_to_steal(folder_name, model, device, discard_mlp=False):
+def load_victim(folder_name, model, device, discard_mlp=False):
     def get_file_id_by_model(folder_name):
         file_id = {
             'resnet18_100-epochs_stl10': '14_nH2FkyKbt61cieQDiSbBVNP8-gtwgF',

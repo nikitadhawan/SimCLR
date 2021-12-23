@@ -6,7 +6,7 @@ from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
 from models.resnet_simclr import ResNetSimCLR
 from simclr import SimCLR
-from utils import load_model_to_steal
+from utils import load_victim
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -76,13 +76,19 @@ def main():
 
     train_dataset = dataset.get_dataset(args.dataset_name, args.n_views)
 
+    test_dataset = dataset.get_test_dataset(args.dataset_name, args.n_views)
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model_to_steal = ResNetSimCLR(base_model=args.arch,
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
+
+    victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
-    model_to_steal = load_model_to_steal(args.folder_name, model_to_steal,
+    victim_model = load_victim(args.folder_name, victim_model,
                                          device=args.device)
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
 
@@ -95,7 +101,7 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(stealing=True, model_to_steal=model_to_steal,
+        simclr = SimCLR(stealing=True, victim_model=victim_model,
                         model=model, optimizer=optimizer, scheduler=scheduler,
                         args=args, logdir=args.logdir)
         simclr.steal(train_loader, args.num_queries)

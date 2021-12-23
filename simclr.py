@@ -24,7 +24,7 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
 
 class SimCLR(object):
 
-    def __init__(self, stealing=False, model_to_steal=None, logdir='', *args,
+    def __init__(self, stealing=False, victim_model=None, logdir='', *args,
                  **kwargs):
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
@@ -39,7 +39,7 @@ class SimCLR(object):
         self.stealing = stealing
         if self.stealing:
             # self.criterion = torch.nn.MSELoss().to(self.args.device)
-            self.model_to_steal = model_to_steal.to(self.args.device)
+            self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
 
@@ -157,7 +157,7 @@ class SimCLR(object):
                 images = images.to(self.args.device)
 
                 with autocast(enabled=self.args.fp16_precision):
-                    query_features = self.model_to_steal(images)
+                    query_features = self.victim_model(images)
                     features = self.model(images)
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
