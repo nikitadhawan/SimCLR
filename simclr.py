@@ -38,7 +38,7 @@ class SimCLR(object):
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         if self.stealing:
-            # self.criterion = torch.nn.MSELoss().to(self.args.device)
+            self.criterion = soft_cross_entropy().to(self.args.device)
             self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
@@ -138,6 +138,7 @@ class SimCLR(object):
             f"Model checkpoint and metadata has been saved at {self.writer.log_dir}.")
 
     def steal(self, train_loader, num_queries):
+        # Note: We use the test set to attack the model.
 
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
@@ -153,10 +154,10 @@ class SimCLR(object):
         for epoch_counter in range(self.args.epochs):
             for images, _ in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
-
+                # Add augmentations / different querying strategies.
                 images = images.to(self.args.device)
 
-                with autocast(enabled=self.args.fp16_precision):
+                with autocast(enabled=self.args.fp16_precision): # do we need autocast?
                     query_features = self.victim_model(images)
                     features = self.model(images)
                     all_features = torch.cat([features, query_features], dim=0)

@@ -92,7 +92,7 @@ def main():
                                          device=args.device)
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
 
-    optimizer = torch.optim.Adam(model.parameters(), args.lr,
+    optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
@@ -104,7 +104,7 @@ def main():
         simclr = SimCLR(stealing=True, victim_model=victim_model,
                         model=model, optimizer=optimizer, scheduler=scheduler,
                         args=args, logdir=args.logdir)
-        simclr.steal(train_loader, args.num_queries)
+        simclr.steal(test_loader, args.num_queries)
 
 
 if __name__ == "__main__":
