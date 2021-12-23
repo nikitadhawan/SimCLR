@@ -39,7 +39,7 @@ class SimCLR(object):
             filename=os.path.join(self.writer.log_dir, 'training.log'),
             level=logging.DEBUG)
         if self.stealing:
-            #self.criterion = soft_cross_entropy
+            #self.criterion = soft_cross_entropy # Need to modify the labels we use for this to work.
             self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
@@ -72,8 +72,10 @@ class SimCLR(object):
         logits = torch.cat([positives, negatives], dim=1)
         labels = torch.zeros(logits.shape[0], dtype=torch.long).to(
             self.args.device)
-        if not self.stealing:
-            logits = logits / self.args.temperature  # Do we need temperature scaling for soft CE loss?
+        #if not self.stealing:
+        logits = logits / self.args.temperature  # Do we need temperature scaling for soft CE loss?
+        print("labels", torch.sum(labels))
+        print("logits",logits)
         return logits, labels
 
     def train(self, train_loader):
@@ -95,7 +97,7 @@ class SimCLR(object):
 
                 with autocast(enabled=self.args.fp16_precision):
                     features = self.model(images)
-                    logits, labels = self.info_nce_loss(features)
+                    logits, labels = self.info_nce_loss(features)  # Check this again. We should use features directly if we are working with soft CE
                     loss = self.criterion(logits, labels)
 
                 self.optimizer.zero_grad()
@@ -161,9 +163,7 @@ class SimCLR(object):
                 query_features = self.victim_model(images)
                 features = self.model(images)
                 all_features = torch.cat([features, query_features], dim=0)
-                logits, labels = self.info_nce_loss(query_features)
-                #print("shape1", logits.size())    # Need to check this. It is currently 1024x1023.
-                #print("2", labels.size())   # 1024
+                logits, labels = self.info_nce_loss(all_features)
                 loss = self.criterion(logits, labels)
 
                 self.optimizer.zero_grad()
