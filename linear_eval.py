@@ -9,6 +9,7 @@ import argparse
 from torch.utils.data import DataLoader
 from models.resnet_simclr import ResNetSimCLR
 import torchvision.transforms as transforms
+import logging
 from torchvision import datasets
 
 
@@ -29,10 +30,15 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--modeltype', default='victim', type=str,
-                    help='Log directory to save output to.', choices=['victim', 'stolen'])
+                    help='Type of model to evaluate', choices=['victim', 'stolen'])
 
 args = parser.parse_args()
-
+logname = f'testing{args.modeltype}.log'
+if os.path.exists(os.path.join('runs/eval' + '', logname)):
+    os.remove(os.path.join('runs/eval' + '', logname))
+logging.basicConfig(
+    filename=os.path.join('runs/eval' + '', logname),
+    level=logging.DEBUG)
 
 
 def load_victim(epochs, dataset, model, device):
@@ -60,7 +66,7 @@ def load_stolen(epochs, dataset, model, device):
     print("Loading stolen model: ")
 
     checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
+        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.
@@ -196,3 +202,5 @@ for epoch in range(epochs):
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
     print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+    logging.debug(
+        f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")

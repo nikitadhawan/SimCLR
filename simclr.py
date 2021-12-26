@@ -195,8 +195,7 @@ class SimCLR(object):
 
         logging.info("Stealing has finished.")
         # save model checkpoints
-        checkpoint_name = 'stolen_checkpoint_{:04d}.pth.tar'.format(
-            self.args.epochs)
+        checkpoint_name = f'stolen_checkpoint_{self.args.epochs}.pth.tar'
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
