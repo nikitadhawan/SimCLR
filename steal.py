@@ -87,8 +87,8 @@ def main():
     victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
-                                         device=args.device)
-    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
+                                         device=args.device, discard_mlp=True)
+    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, include_mlp = False)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)

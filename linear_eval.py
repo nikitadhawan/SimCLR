@@ -6,44 +6,8 @@ import yaml
 import matplotlib.pyplot as plt
 import torchvision
 import argparse
-
-parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-folder-name', metavar='DIR', default='test',
-                    help='path to dataset')
-parser.add_argument('-dataset-name', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18', 
-        choices=['resnet18', 'resnet50'], help='model architecture')
-parser.add_argument('-n', '--num-labeled', default=500,
-                     help='Number of labeled examples to train on')
-
-args = parser.parse_args()
-
-def load_model_to_steal(folder_name, model, device):
-    def get_file_id_by_model(folder_name):
-        file_id = {'resnet18_100-epochs_stl10': '14_nH2FkyKbt61cieQDiSbBVNP8-gtwgF',
-                   'resnet18_100-epochs_cifar10': '1lc2aoVtrAetGn0PnTkOyFzPCIucOJq7C',
-                   'resnet50_50-epochs_stl10': '1ByTKAUsdm_X7tLcii6oAEl5qFRqRMZSu'}
-        return file_id.get(folder_name, "Model not found.")
-    
-    file_id = get_file_id_by_model(folder_name)
-    print("Loading stolen model: ", folder_name)
-    
-    checkpoint = torch.load('/ssd003/home/nikita/SimCLR/runs/{}/stolen_checkpoint_0100.pth.tar'.format(folder_name), map_location=device)
-    state_dict = checkpoint['state_dict']
-
-    for k in list(state_dict.keys()):
-        if k.startswith('backbone.'):
-            if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                # remove prefix
-                state_dict[k[len("backbone."):]] = state_dict[k]
-        del state_dict[k]
-        
-    log = model.load_state_dict(state_dict, strict=False)
-    assert log.missing_keys == ['fc.weight', 'fc.bias']
-    return model
-
 from torch.utils.data import DataLoader
+from models.resnet_simclr import ResNetSimCLR
 import torchvision.transforms as transforms
 from torchvision import datasets
 
@@ -51,52 +15,87 @@ from torchvision import datasets
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
 
+parser = argparse.ArgumentParser(description='PyTorch SimCLR')
+parser.add_argument('-folder-name', metavar='DIR', default='test',
+                    help='path to dataset')
+parser.add_argument('-dataset', default='cifar10',
+                    help='dataset name', choices=['stl10', 'cifar10'])
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
+        choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
+parser.add_argument('-n', '--num-labeled', default=500,
+                     help='Number of labeled batches to train on')
+parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
+                    help='number of epochs victim was trained with')
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
+                    help='number of epochs stolen model was trained with')
+parser.add_argument('--modeltype', default='victim', type=str,
+                    help='Log directory to save output to.', choices=['victim', 'stolen'])
+
+args = parser.parse_args()
+
+
+
+def load_victim(epochs, dataset, model, device):
+
+    print("Loading victim model: ")
+
+    checkpoint = torch.load(
+        f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
+    state_dict = checkpoint['state_dict']
+
+    # Remove head.
+    for k in list(state_dict.keys()):
+        if k.startswith('backbone.'):
+            if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                # remove prefix
+                state_dict[k[len("backbone."):]] = state_dict[k]
+        del state_dict[k] # delete the head (i.e. layers that do not include backbone)
+
+    log = model.load_state_dict(state_dict, strict=False)
+    assert log.missing_keys == ['fc.weight', 'fc.bias']
+    return model
+
+def load_stolen(epochs, dataset, model, device):
+
+    print("Loading stolen model: ")
+
+    checkpoint = torch.load(
+        f'/ssd003/home/akaleem/SimCLR/runs/test/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
+    state_dict = checkpoint['state_dict']
+
+    # Remove head.
+    for k in list(state_dict.keys()):
+        if k.startswith('backbone.'):
+            if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                # remove prefix
+                state_dict[k[len("backbone."):]] = state_dict[k]
+        del state_dict[k]
+
+    log = model.load_state_dict(state_dict, strict=False)
+    assert log.missing_keys == ['fc.weight', 'fc.bias']
+    return model
+
 def get_stl10_data_loaders(download, shuffle=False, batch_size=256):
-    train_dataset = datasets.STL10('/ssd003/home/nikita/mydata/', split='train', download=download,
+    train_dataset = datasets.STL10('/ssd003/home/akaleem/data/', split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10('/ssd003/home/nikita/mydata/', split='test', download=download,
+    test_dataset = datasets.STL10('/ssd003/home/akaleem/data/', split='test', download=download,
                                   transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
                             num_workers=10, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
 def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
-    train_dataset = datasets.CIFAR10('/ssd003/home/nikita/datasets/cifar10/', train=True, download=download,
+    train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('/ssd003/home/nikita/datasets/cifar10/', train=False, download=download,
+    test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
                                   transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
                             num_workers=10, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
-
-
-if args.arch == 'resnet18':
-    model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
-elif args.arch == 'resnet50':
-    model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
-
-model = load_model_to_steal(args.folder_name, model, device=device)
-
-if args.dataset_name == 'cifar10':
-    train_loader, test_loader = get_cifar10_data_loaders(download=True)
-elif args.dataset_name == 'stl10':
-    train_loader, test_loader = get_stl10_data_loaders(download=True)
-print("Dataset:", args.dataset_name)
-
-# freeze all layers but the last fc
-for name, param in model.named_parameters():
-    if name not in ['fc.weight', 'fc.bias']:
-        param.requires_grad = False
-
-parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-assert len(parameters) == 2  # fc.weight, fc.bias
-
-optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
-criterion = torch.nn.CrossEntropyLoss().to(device)
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
@@ -113,9 +112,56 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
-    
 
+
+def soft_cross_entropy(pred, soft_targets, weights=None):
+    if weights is not None:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
+                      1))
+    else:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
+
+
+
+
+if args.arch == 'resnet18':
+    model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
+elif args.arch == 'resnet34':
+    model = torchvision.models.resnet34(pretrained=False,
+                                        num_classes=10).to(device)
+elif args.arch == 'resnet50':
+    model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
+
+if args.modeltype == "victim":
+    model = load_victim(args.epochstrain, args.dataset, model,
+                                         device=device)
+else:
+    model = load_stolen(args.epochs, args.dataset, model,
+                        device=device)
+
+if args.dataset == 'cifar10':
+    train_loader, test_loader = get_cifar10_data_loaders(download=True)
+elif args.dataset == 'stl10':
+    train_loader, test_loader = get_stl10_data_loaders(download=True)
+print("Dataset:", args.dataset)
+
+# freeze all layers but the last fc
+for name, param in model.named_parameters():
+    if name not in ['fc.weight', 'fc.bias']:
+        param.requires_grad = False
+
+parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+assert len(parameters) == 2  # fc.weight, fc.bias
+
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
+criterion = torch.nn.CrossEntropyLoss().to(device)
 epochs = 100
+
+## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
+
+
 for epoch in range(epochs):
     top1_train_accuracy = 0
     for counter, (x_batch, y_batch) in enumerate(train_loader):
@@ -130,10 +176,10 @@ for epoch in range(epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
         if counter+1 == args.num_labeled:
-            break;
-    
+            break
+
     top1_train_accuracy /= (counter + 1)
     top1_accuracy = 0
     top5_accuracy = 0
@@ -146,8 +192,7 @@ for epoch in range(epochs):
         top1, top5 = accuracy(logits, y_batch, topk=(1,5))
         top1_accuracy += top1[0]
         top5_accuracy += top5[0]
-  
+
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
     print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
-

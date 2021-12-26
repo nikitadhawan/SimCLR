@@ -18,8 +18,9 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
             torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
                       1))
     else:
-        return torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
+        return torch.abs(torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1)))
+        # Absolute value was added here as loss was negative and decreasing otherwise. Need to check again.
 
 
 class SimCLR(object):
@@ -39,7 +40,7 @@ class SimCLR(object):
             filename=os.path.join(self.writer.log_dir, 'training.log'),
             level=logging.DEBUG)
         if self.stealing:
-            self.criterion = soft_cross_entropy # Need to modify the labels we use for this to work.
+            self.criterion = soft_cross_entropy
             self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
@@ -97,7 +98,7 @@ class SimCLR(object):
 
                 with autocast(enabled=self.args.fp16_precision):
                     features = self.model(images)
-                    logits, labels = self.info_nce_loss(features)  # Check this again. We should use features directly if we are working with soft CE
+                    logits, labels = self.info_nce_loss(features)
                     loss = self.criterion(logits, labels)
 
                 self.optimizer.zero_grad()
@@ -153,18 +154,18 @@ class SimCLR(object):
 
 
         for epoch_counter in range(self.args.epochs):
-            total_queries = 0 # temporary solution. better than this is to just select the trainloader to only have that many queries.
+            total_queries = 0
             for images, _ in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
                 # Add augmentations / different querying strategies.
                 images = images.to(self.args.device)
 
-                #with autocast(enabled=self.args.fp16_precision): # do we need autocast?
-                query_features = self.victim_model(images)
-                features = self.model(images)
-                all_features = torch.cat([features, query_features], dim=0)
-                logits, labels = self.info_nce_loss(all_features)
-                loss = self.criterion(logits, labels)
+                query_features = self.victim_model(images) # victim model predictions
+                features = self.model(images) # current stolen model predictions: 512x128 (128 images, 512 dimensional representation)
+                loss = self.criterion(features, query_features)
+                #print("loss", loss)
+                #all_features = torch.cat([features, query_features], dim=0)
+                #logits, labels = self.info_nce_los(all_features)  # only being used to compute the accuracy.
 
                 self.optimizer.zero_grad()
 
@@ -174,12 +175,9 @@ class SimCLR(object):
                 scaler.update()
 
                 if n_iter % self.args.log_every_n_steps == 0:
-                    top1, top5 = accuracy(logits, labels, topk=(1, 5))
+                    # We only measure the loss since we are computing the loss based on the victims representations and the stolen model's representations.
+                    # The accuracy cannot be measured in the same way and will instead be measured at the end using linear_eval.py
                     self.writer.add_scalar('loss', loss, global_step=n_iter)
-                    self.writer.add_scalar('acc/top1', top1[0],
-                                           global_step=n_iter)
-                    self.writer.add_scalar('acc/top5', top5[0],
-                                           global_step=n_iter)
                     self.writer.add_scalar('learning_rate',
                                            self.scheduler.get_lr()[0],
                                            global_step=n_iter)
@@ -193,7 +191,7 @@ class SimCLR(object):
             if epoch_counter >= 10:
                 self.scheduler.step()
             logging.debug(
-                f"Epoch: {epoch_counter}\tLoss: {loss}\tTop1 accuracy: {top1[0]}")
+                f"Epoch: {epoch_counter}\tLoss: {loss}\t")
 
         logging.info("Stealing has finished.")
         # save model checkpoints
