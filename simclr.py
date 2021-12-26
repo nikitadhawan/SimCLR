@@ -39,7 +39,7 @@ class SimCLR(object):
             filename=os.path.join(self.writer.log_dir, 'training.log'),
             level=logging.DEBUG)
         if self.stealing:
-            #self.criterion = soft_cross_entropy # Need to modify the labels we use for this to work.
+            self.criterion = soft_cross_entropy # Need to modify the labels we use for this to work.
             self.victim_model = victim_model.to(self.args.device)
 
     def info_nce_loss(self, features):
@@ -74,8 +74,8 @@ class SimCLR(object):
             self.args.device)
         #if not self.stealing:
         logits = logits / self.args.temperature  # Do we need temperature scaling for soft CE loss?
-        print("labels", torch.sum(labels))
-        print("logits",logits)
+        # print("labels", torch.sum(labels))
+        # print("logits",logits)
         return logits, labels
 
     def train(self, train_loader):
