@@ -1,4 +1,5 @@
 # FGSM attack on linear classifier for trained stolen model.
+# Also tests the performance of the victim model based on the generated adversarial examples.
 
 import torch
 import torch.nn as nn
@@ -45,6 +46,8 @@ parser.add_argument('--modeltype', default='victim', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
 args = parser.parse_args()
 
+
+# Code adapted from https://pytorch.org/tutorials/beginner/fgsm_tutorial.html
 
 def fgsm_attack(image, epsilon, data_grad):
     # Collect the element-wise sign of the data gradient
@@ -97,7 +100,7 @@ def test( model, device, test_loader, epsilon, victim_model):
 
         # Re-classify the perturbed image
         output = model(perturbed_data)
-        output2 = victim_model(perturbed_data)
+        output2 = victim_model(data)
 
         # Check for success
         final_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
@@ -144,13 +147,47 @@ elif args.arch == 'resnet50':
 checkpoint = torch.load(
         '/ssd003/home/akaleem/SimCLR/runs/eval/stolen_linear.pth.tar')
 stolen_model.load_state_dict(checkpoint)  # load stolen model
+
 checkpoint2 = torch.load(
     '/ssd003/home/akaleem/SimCLR/runs/eval/victim_linear.pth.tar')
 victim_model.load_state_dict(checkpoint2)  # load victim model
-victim_model = victim_model.cuda()
-stolen_model = stolen_model.cuda()
+
+victim_model.to(device)
+stolen_model.to(device)
 stolen_model.eval()
 victim_model.eval()
+
+def accuracy(output, target, topk=(1,)):
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
+
+top1_accuracy = 0
+top5_accuracy = 0
+for counter, (x_batch, y_batch) in enumerate(test_loader):
+    x_batch = x_batch.to(device)
+    y_batch = y_batch.to(device)
+
+    logits = stolen_model(x_batch)
+
+    top1, top5 = accuracy(logits, y_batch, topk=(1,5))
+    top1_accuracy += top1[0]
+    top5_accuracy += top5[0]
+
+top1_accuracy /= (counter + 1)
+top5_accuracy /= (counter + 1)
+print(f"Top1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
 
 epsilons = [0, .05, .1, .15, .2, .25, .3]
