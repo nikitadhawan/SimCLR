@@ -21,7 +21,7 @@ parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=500,
                      help='Number of labeled batches to train on')
@@ -65,8 +65,11 @@ def load_stolen(epochs, dataset, model, device):
 
     print("Loading stolen model: ")
 
+    # checkpoint = torch.load(
+    #     f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
     checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
+        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar',
+        map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.
@@ -99,8 +102,11 @@ def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
                             num_workers=0, drop_last=False, shuffle=shuffle)
     test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
                                   transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
-                            num_workers=10, drop_last=False, shuffle=shuffle)
+    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    test_dataset = torch.utils.data.Subset(test_dataset,
+                                           indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
 def accuracy(output, target, topk=(1,)):
@@ -161,8 +167,13 @@ for name, param in model.named_parameters():
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
-optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
-criterion = torch.nn.CrossEntropyLoss().to(device)
+if args.modeltype == "victim":
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+else:
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4,
+                                 weight_decay=0.0008)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
 epochs = 100
 
 ## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
@@ -204,3 +215,8 @@ for epoch in range(epochs):
     print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
     logging.debug(
         f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+
+if args.modeltype == "stolen":
+    torch.save(model.state_dict(), 'runs/eval/stolen_linear.pth.tar')
+else:
+    torch.save(model.state_dict(), 'runs/eval/victim_linear.pth.tar')

@@ -22,6 +22,11 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     help='model architecture: ' +
                          ' | '.join(model_names) +
                          ' (default: resnet50)')
+parser.add_argument('--archstolen', default='resnet18',
+                    choices=model_names,
+                    help='stolen model architecture: ' +
+                         ' | '.join(model_names) +
+                         ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
@@ -33,7 +38,7 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.0003, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float,  # 0.0003
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
@@ -49,7 +54,7 @@ parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
-parser.add_argument('--num_queries', default=10000, type=int, metavar='N',
+parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
@@ -58,6 +63,8 @@ parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
                     type=str, help='Pretrained SimCLR model to steal.')
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
+parser.add_argument('--losstype', default='softce', type=str,
+                    help='Loss function to use (softce or infonce)', choices=['softce', 'infonce'])
 
 
 def main():
@@ -75,20 +82,25 @@ def main():
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
     test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
+    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    test_dataset = torch.utils.data.Subset(test_dataset, indxs) # only select last 1000 samples to prevent overlap with queried samples.
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
+        train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=True,
+        test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                          device=args.device, discard_mlp=True)
-    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, include_mlp = False)
+    model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, include_mlp = False)
+
+    if args.losstype == "infonce":
+        args.lr = 0.0003
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
@@ -101,7 +113,7 @@ def main():
     with torch.cuda.device(args.gpu_index):
         simclr = SimCLR(stealing=True, victim_model=victim_model,
                         model=model, optimizer=optimizer, scheduler=scheduler,
-                        args=args, logdir=args.logdir)
+                        args=args, logdir=args.logdir, loss=args.losstype)
         simclr.steal(test_loader, args.num_queries)
 
 
