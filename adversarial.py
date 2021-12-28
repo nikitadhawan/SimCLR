@@ -65,6 +65,7 @@ def test( model, device, test_loader, epsilon, victim_model):
     correct = 0
     correct2 = 0
     adv_examples = []
+    num_examples = len(test_loader)
 
     # Loop over all examples in test set
     for data, target in test_loader:
@@ -79,8 +80,10 @@ def test( model, device, test_loader, epsilon, victim_model):
         output = model(data)
         init_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
 
+
         # If the initial prediction is wrong, dont bother attacking, just move on
         if init_pred.item() != target.item():
+            num_examples -= 1
             continue
 
         # Calculate the loss
@@ -97,14 +100,15 @@ def test( model, device, test_loader, epsilon, victim_model):
 
         # Call FGSM Attack
         perturbed_data = fgsm_attack(data, epsilon, data_grad)
-
         # Re-classify the perturbed image
         output = model(perturbed_data)
-        output2 = victim_model(data)
+        output2 = victim_model(perturbed_data)
 
         # Check for success
         final_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
         final_pred2 = output2.max(1, keepdim=True)[1]
+        if final_pred2.item() == target.item():
+            correct2 += 1
         if final_pred.item() == target.item():
             correct += 1
             # Special case for saving 0 epsilon examples
@@ -116,16 +120,17 @@ def test( model, device, test_loader, epsilon, victim_model):
             if len(adv_examples) < 5:
                 adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
                 adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
-        if final_pred2.item() == target.item():
-            correct2 += 1
 
     # Calculate final accuracy for this epsilon
-    final_acc = correct/float(len(test_loader))
-    final_acc_vic = correct2 / float(len(test_loader))
-    print("Epsilon: {}\tTest Accuracy (Stolen Model) = {} / {} = {}".format(
-        epsilon, correct, len(test_loader), final_acc))
-    print("Epsilon: {}\tTest Accuracy (Victim Model) = {} / {} = {}".format(
-        epsilon, correct2, len(test_loader), final_acc_vic))
+    # Note: The accuracy is computed only over the generated adversarial examples (not over the whole test set)
+    # With eps = 0, the stolen accuracy will thus be 100%
+    # This allows for the transferability of the adversarial examples to be measured.
+    final_acc = correct/ float(num_examples)
+    final_acc_vic = correct2 / float(num_examples)
+    print("Epsilon: {}\tTest Accuracy (Stolen Model) = {} / {} = {}%".format(
+        epsilon, correct, num_examples, final_acc*100))
+    print("Epsilon: {}\tTest Accuracy (Victim Model) = {} / {} = {}%".format(
+        epsilon, correct2, num_examples, final_acc_vic*100))
     # Return the accuracy and an adversarial example
     return final_acc, final_acc_vic, adv_examples
 
@@ -157,37 +162,8 @@ stolen_model.to(device)
 stolen_model.eval()
 victim_model.eval()
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
 
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
 
-        res = []
-        for k in topk:
-            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
-
-top1_accuracy = 0
-top5_accuracy = 0
-for counter, (x_batch, y_batch) in enumerate(test_loader):
-    x_batch = x_batch.to(device)
-    y_batch = y_batch.to(device)
-
-    logits = stolen_model(x_batch)
-
-    top1, top5 = accuracy(logits, y_batch, topk=(1,5))
-    top1_accuracy += top1[0]
-    top5_accuracy += top5[0]
-
-top1_accuracy /= (counter + 1)
-top5_accuracy /= (counter + 1)
-print(f"Top1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
 
 epsilons = [0, .05, .1, .15, .2, .25, .3]
