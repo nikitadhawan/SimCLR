@@ -17,47 +17,16 @@ import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 
-def load_stolen(model, device):
-
-    print("Loading stolen model: ")
-
-    checkpoint = torch.load(
-        '/ssd003/home/akaleem/SimCLR/runs/eval/stolen_linear.pth.tar', map_location=device)
-    state_dict = checkpoint['state_dict']
-    model.load_state_dict(state_dict, strict=False)
-    return model
-
-def load_victim(model, device):
-
-    print("Loading victim model: ")
-
-    checkpoint = torch.load(
-        '/ssd003/home/akaleem/SimCLR/runs/eval/victim_linear.pth.tar', map_location=device)
-    state_dict = checkpoint['state_dict']
-
-    model.load_state_dict(state_dict, strict=False)
-    return model
-
-
-
-def fgsm_attack(image, epsilon, data_grad):
-    # Collect the element-wise sign of the data gradient
-    sign_data_grad = data_grad.sign()
-    # Create the perturbed image by adjusting each pixel of the input image
-    perturbed_image = image + epsilon*sign_data_grad
-    # Adding clipping to maintain [0,1] range
-    perturbed_image = torch.clamp(perturbed_image, 0, 1)
-    # Return the perturbed image
-    return perturbed_image
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
-test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
-                                  transform=transforms.ToTensor())
+test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=False,
+                                  transform=transforms.transforms.Compose([
+                                  transforms.ToTensor(),
+                                  ]))
 indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
 test_dataset = torch.utils.data.Subset(test_dataset, indxs)
 test_loader = DataLoader(test_dataset, batch_size=1,
-                        num_workers=10, drop_last=False, shuffle=shuffle)
+                        num_workers=2, drop_last=False, shuffle=False)
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
@@ -74,26 +43,24 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--modeltype', default='victim', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
+args = parser.parse_args()
 
 
-if args.arch == 'resnet18':
-    model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
-elif args.arch == 'resnet34':
-    model = torchvision.models.resnet34(pretrained=False,
-                                        num_classes=10).to(device)
-elif args.arch == 'resnet50':
-    model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
-
-stolen_model = load_stolen(model,device=device)
-victim_model = load_victim(model,device=device)
-stolen_model.eval()
-victim_model.eval()
-
+def fgsm_attack(image, epsilon, data_grad):
+    # Collect the element-wise sign of the data gradient
+    sign_data_grad = data_grad.sign()
+    # Create the perturbed image by adjusting each pixel of the input image
+    perturbed_image = image + epsilon*sign_data_grad
+    # Adding clipping to maintain [0,1] range
+    perturbed_image = torch.clamp(perturbed_image, 0, 1)
+    # Return the perturbed image
+    return perturbed_image
 
 def test( model, device, test_loader, epsilon, victim_model):
 
     # Accuracy counter
     correct = 0
+    correct2 = 0
     adv_examples = []
 
     # Loop over all examples in test set
@@ -130,9 +97,11 @@ def test( model, device, test_loader, epsilon, victim_model):
 
         # Re-classify the perturbed image
         output = model(perturbed_data)
+        output2 = victim_model(perturbed_data)
 
         # Check for success
         final_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
+        final_pred2 = output2.max(1, keepdim=True)[1]
         if final_pred.item() == target.item():
             correct += 1
             # Special case for saving 0 epsilon examples
@@ -144,6 +113,8 @@ def test( model, device, test_loader, epsilon, victim_model):
             if len(adv_examples) < 5:
                 adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
                 adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
+        if final_pred2.item() == target.item():
+            correct2 += 1
 
     # Calculate final accuracy for this epsilon
     final_acc = correct/float(len(test_loader))
@@ -153,10 +124,36 @@ def test( model, device, test_loader, epsilon, victim_model):
     print("Epsilon: {}\tTest Accuracy (Victim Model) = {} / {} = {}".format(
         epsilon, correct2, len(test_loader), final_acc_vic))
     # Return the accuracy and an adversarial example
-    return final_acc, final_acc_vic adv_examples
+    return final_acc, final_acc_vic, adv_examples
+
+
+
+if args.arch == 'resnet18':
+    stolen_model = torchvision.models.resnet18(pretrained=False, num_classes=10)
+
+    victim_model = torchvision.models.resnet18(pretrained=False, num_classes=10)
+elif args.arch == 'resnet34':
+    stolen_model = torchvision.models.resnet34(pretrained=False,
+                                        num_classes=10)
+    victim_model = torchvision.models.resnet34(pretrained=False,
+                                        num_classes=10)
+elif args.arch == 'resnet50':
+    stolen_model = torchvision.models.resnet50(pretrained=False, num_classes=10)
+    victim_model = torchvision.models.resnet50(pretrained=False, num_classes=10)
+
+checkpoint = torch.load(
+        '/ssd003/home/akaleem/SimCLR/runs/eval/stolen_linear.pth.tar')
+stolen_model.load_state_dict(checkpoint)  # load stolen model
+checkpoint2 = torch.load(
+    '/ssd003/home/akaleem/SimCLR/runs/eval/victim_linear.pth.tar')
+victim_model.load_state_dict(checkpoint2)  # load victim model
+victim_model = victim_model.cuda()
+stolen_model = stolen_model.cuda()
+stolen_model.eval()
+victim_model.eval()
+
 
 epsilons = [0, .05, .1, .15, .2, .25, .3]
 
 for eps in epsilons:
-    test(model, device, test_loader, eps, victim_model)
-    
+    test(stolen_model, device, test_loader, eps, victim_model)
