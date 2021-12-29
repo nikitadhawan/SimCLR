@@ -39,7 +39,6 @@ class SimCLR(object):
             filename=os.path.join(self.log_dir, 'training.log'),
             level=logging.DEBUG)
         if self.stealing:
-
             self.victim_model = victim_model.to(self.args.device)
         if self.loss == "softce":
             self.criterion = soft_cross_entropy
@@ -163,7 +162,7 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 features = self.model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional representation)
                 if self.loss == "softce":
-                    loss = self.criterion(features, F.softmax(query_features, dim=1)) # F.softmax(features, dim=1)
+                    loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)
                 else:
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)

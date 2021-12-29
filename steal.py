@@ -31,9 +31,9 @@ parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
-parser.add_argument('--epochs', default=100, type=int, metavar='N',
+parser.add_argument('--epochs', default=99, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=64, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -63,8 +63,12 @@ parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
                     type=str, help='Pretrained SimCLR model to steal.')
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
-parser.add_argument('--losstype', default='softce', type=str,
+parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use (softce or infonce)', choices=['softce', 'infonce'])
+parser.add_argument('--victimhead', default='False', type=str,
+                    help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
+parser.add_argument('--stolenhead', default='False', type=str,
+                    help='Use an additional head while training the stolen model.', choices=['True', 'False'])
 
 
 def main():
@@ -97,13 +101,23 @@ def main():
 
     victim_model = ResNetSimCLR(base_model=args.arch,
                                   out_dim=args.out_dim).to(args.device)
-    victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
-                                         device=args.device, discard_mlp=True)
-    model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, include_mlp = False)
+    if args.victimhead == "False":
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                             device=args.device, discard_mlp=True)
+    else:
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                   device=args.device, discard_mlp=False)
+    if args.stolenhead == "False":
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim,
+                             include_mlp=False)
+    else:
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim,
+                             include_mlp=True)
 
     if args.losstype == "infonce":
         args.lr = 0.0003
         args.batch_size = 256
+        args.weight_decay = 1e-4
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)

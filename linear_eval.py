@@ -67,11 +67,11 @@ def load_stolen(epochs, dataset, model, device):
 
     print("Loading stolen model: ")
 
-    # checkpoint = torch.load(
-    #     f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
     checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar',
-        map_location=device)
+        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
+    # checkpoint = torch.load(
+    #     f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar',
+    #     map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.

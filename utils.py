@@ -46,7 +46,7 @@ def load_victim(epochs, dataset, model, device, discard_mlp=False):
         for k in list(state_dict.keys()):
             if k.startswith('backbone.'):
                 if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                    # remove prefix
+                    # remove prefix and only save if not backbone.fc (i.e. not including projection head)
                     state_dict[k[len("backbone."):]] = state_dict[k]
             del state_dict[k]
 
