@@ -38,7 +38,7 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float,  # 0.0003
+parser.add_argument('--lr', '--learning-rate', default=0.0003, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
@@ -81,16 +81,18 @@ def main():
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
-    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    test_dataset = torch.utils.data.Subset(test_dataset, indxs) # only select last 1000 samples to prevent overlap with queried samples.
+
+    query_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
+    indxs = list(range(0, len(query_dataset) - 1000))
+    query_dataset = torch.utils.data.Subset(query_dataset,
+                                           indxs)  # query set (without last 1000 samples in the test set)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
+    query_loader = torch.utils.data.DataLoader(
+        query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     victim_model = ResNetSimCLR(base_model=args.arch,
@@ -114,7 +116,7 @@ def main():
         simclr = SimCLR(stealing=True, victim_model=victim_model,
                         model=model, optimizer=optimizer, scheduler=scheduler,
                         args=args, logdir=args.logdir, loss=args.losstype)
-        simclr.steal(test_loader, args.num_queries)
+        simclr.steal(query_loader, args.num_queries)
 
 
 if __name__ == "__main__":

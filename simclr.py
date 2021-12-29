@@ -5,7 +5,6 @@ import sys
 import torch
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
-#from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
 
@@ -18,9 +17,11 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
             torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
                       1))
     else:
-        return torch.abs(torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1)))
+        # return torch.abs(torch.mean(
+        #     torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1)))
         # Absolute value was added here as loss was negative and decreasing otherwise. Need to check again.
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
 
 class SimCLR(object):
@@ -32,7 +33,6 @@ class SimCLR(object):
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
-        #self.writer = SummaryWriter(log_dir=self.log_dir)
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         self.loss = loss
@@ -166,8 +166,7 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 features = self.model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional representation)
                 if self.loss == "softce":
-                    loss = self.criterion(features, query_features)
-                #print("loss", loss)
+                    loss = self.criterion(F.softmax(features, dim=1), F.softmax(query_features, dim=1))
                 else:
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
