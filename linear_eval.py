@@ -31,6 +31,8 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--modeltype', default='victim', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
+parser.add_argument('--save', default='True', type=str,
+                    help='Save final model', choices=['True', 'False'])
 
 args = parser.parse_args()
 logname = f'testing{args.modeltype}.log'
@@ -216,7 +218,8 @@ for epoch in range(epochs):
     logging.debug(
         f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
-if args.modeltype == "stolen":
-    torch.save(model.state_dict(), 'runs/eval/stolen_linear.pth.tar')
-else:
-    torch.save(model.state_dict(), 'runs/eval/victim_linear.pth.tar')
+if args.save == "True":
+    if args.modeltype == "stolen":
+        torch.save(model.state_dict(), 'runs/eval/stolen_linear.pth.tar')
+    else:
+        torch.save(model.state_dict(), 'runs/eval/victim_linear.pth.tar')

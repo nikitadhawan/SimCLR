@@ -103,6 +103,7 @@ def main():
 
     if args.losstype == "infonce":
         args.lr = 0.0003
+        args.batch_size = 256
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
