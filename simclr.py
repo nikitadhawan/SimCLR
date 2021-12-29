@@ -17,9 +17,6 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
             torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
                       1))
     else:
-        # return torch.abs(torch.mean(
-        #     torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1)))
-        # Absolute value was added here as loss was negative and decreasing otherwise. Need to check again.
         return torch.mean(
             torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
