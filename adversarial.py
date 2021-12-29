@@ -18,17 +18,6 @@ import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print("Using device:", device)
-test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=False,
-                                  transform=transforms.transforms.Compose([
-                                  transforms.ToTensor(),
-                                  ]))
-indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-test_dataset = torch.utils.data.Subset(test_dataset, indxs)
-test_loader = DataLoader(test_dataset, batch_size=1,
-                        num_workers=2, drop_last=False, shuffle=False)
-
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
@@ -42,9 +31,18 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
-parser.add_argument('--modeltype', default='victim', type=str,
-                    help='Type of model to evaluate', choices=['victim', 'stolen'])
 args = parser.parse_args()
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print("Using device:", device)
+test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=False,
+                                  transform=transforms.transforms.Compose([
+                                  transforms.ToTensor(),
+                                  ]))
+indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+test_dataset = torch.utils.data.Subset(test_dataset, indxs)
+test_loader = DataLoader(test_dataset, batch_size=1,
+                        num_workers=2, drop_last=False, shuffle=False)
 
 
 # Code adapted from https://pytorch.org/tutorials/beginner/fgsm_tutorial.html
@@ -149,8 +147,10 @@ elif args.arch == 'resnet50':
     stolen_model = torchvision.models.resnet50(pretrained=False, num_classes=10)
     victim_model = torchvision.models.resnet50(pretrained=False, num_classes=10)
 
+# checkpoint = torch.load(
+#         '/ssd003/home/akaleem/SimCLR/runs/eval/stolen_linear.pth.tar')
 checkpoint = torch.load(
-        '/ssd003/home/akaleem/SimCLR/runs/eval/stolen_linear.pth.tar')
+        '/ssd003/home/akaleem/SimCLR/runs/eval/stolenknockoff.pth.tar')  # To compare against Knockoff
 stolen_model.load_state_dict(checkpoint)  # load stolen model
 
 checkpoint2 = torch.load(
@@ -161,10 +161,6 @@ victim_model.to(device)
 stolen_model.to(device)
 stolen_model.eval()
 victim_model.eval()
-
-
-
-
 
 epsilons = [0, .05, .1, .15, .2, .25, .3]
 
