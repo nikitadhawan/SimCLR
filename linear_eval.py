@@ -33,6 +33,8 @@ parser.add_argument('--modeltype', default='victim', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
 parser.add_argument('--save', default='True', type=str,
                     help='Save final model', choices=['True', 'False'])
+parser.add_argument('--losstype', default='infonce', type=str,
+                    help='Loss function to use (softce or infonce)', choices=['softce', 'infonce'])
 
 args = parser.parse_args()
 logname = f'testing{args.modeltype}.log'
@@ -67,11 +69,13 @@ def load_stolen(epochs, dataset, model, device):
 
     print("Loading stolen model: ")
 
-    checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar', map_location=device)
-    # checkpoint = torch.load(
-    #     f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar',
-    #     map_location=device)
+    if args.losstype == "infonce":
+        checkpoint = torch.load(
+        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar', map_location=device)
+    else:
+        checkpoint = torch.load(
+            f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar',
+            map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.

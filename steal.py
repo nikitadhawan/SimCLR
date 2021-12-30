@@ -31,7 +31,7 @@ parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
-parser.add_argument('--epochs', default=99, type=int, metavar='N',
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=64, type=int,
                     metavar='N',
@@ -81,6 +81,10 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
+    if args.losstype == "infonce":
+        args.lr = 0.0003
+        args.batch_size = 256
+        args.weight_decay = 1e-4
     dataset = RegularDataset(args.data)
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
@@ -113,11 +117,6 @@ def main():
     else:
         model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim,
                              include_mlp=True)
-
-    if args.losstype == "infonce":
-        args.lr = 0.0003
-        args.batch_size = 256
-        args.weight_decay = 1e-4
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)

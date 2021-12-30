@@ -107,17 +107,6 @@ class SimCLR(object):
                 scaler.step(self.optimizer)
                 scaler.update()
 
-                # if n_iter % self.args.log_every_n_steps == 0:
-                #     top1, top5 = accuracy(logits, labels, topk=(1, 5))
-                #     self.writer.add_scalar('loss', loss, global_step=n_iter)
-                #     self.writer.add_scalar('acc/top1', top1[0],
-                #                            global_step=n_iter)
-                #     self.writer.add_scalar('acc/top5', top5[0],
-                #                            global_step=n_iter)
-                #     self.writer.add_scalar('learning_rate',
-                #                            self.scheduler.get_lr()[0],
-                #                            global_step=n_iter)
-
                 n_iter += 1
 
             # warmup for the first 10 epochs
@@ -149,6 +138,7 @@ class SimCLR(object):
 
         n_iter = 0
         logging.info(f"Start SimCLR stealing for {self.args.epochs} epochs.")
+        logging.info(f"Using loss type: {self.loss}")
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
 
 
@@ -174,14 +164,6 @@ class SimCLR(object):
 
                 scaler.step(self.optimizer)
                 scaler.update()
-
-                # if n_iter % self.args.log_every_n_steps == 0:
-                #     # We only measure the loss since we are computing the loss based on the victims representations and the stolen model's representations.
-                #     # The accuracy cannot be measured in the same way and will instead be measured at the end using linear_eval.py
-                #     self.writer.add_scalar('loss', loss, global_step=n_iter)
-                #     self.writer.add_scalar('learning_rate',
-                #                            self.scheduler.get_lr()[0],
-                #                            global_step=n_iter)
 
                 n_iter += 1
                 total_queries += len(images)
