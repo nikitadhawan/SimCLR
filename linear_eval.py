@@ -24,12 +24,12 @@ parser.add_argument('-dataset', default='cifar10',
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=500,
-                     help='Number of labeled batches to train on')
+                     help='Number of labeled batches to train on')  # Right now this is equivalent to the full training set because of the batch size being 512
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
-parser.add_argument('--modeltype', default='victim', type=str,
+parser.add_argument('--modeltype', default='stolen', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
 parser.add_argument('--save', default='True', type=str,
                     help='Save final model', choices=['True', 'False'])
@@ -155,9 +155,11 @@ elif args.arch == 'resnet50':
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model,
                                          device=device)
+    print("Evaluating victim")
 else:
     model = load_stolen(args.epochs, args.dataset, model,
                         device=device)
+    print("Evaluating stolen model")
 
 if args.dataset == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=True)

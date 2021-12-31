@@ -64,7 +64,7 @@ parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
-                    help='Loss function to use (softce or infonce)', choices=['softce', 'infonce'])
+                    help='Loss function to use', choices=['softce', 'infonce', 'wasserstein'])
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,

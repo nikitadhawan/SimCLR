@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
+from loss import wasserstein_loss
 
 torch.manual_seed(0)
 
@@ -42,6 +43,9 @@ class SimCLR(object):
             self.victim_model = victim_model.to(self.args.device)
         if self.loss == "softce":
             self.criterion = soft_cross_entropy
+        elif self.loss == "wasserstein":
+            self.criterion = wasserstein_loss
+
 
     def info_nce_loss(self, features):
         n = int(features.size()[0] / self.args.batch_size)
@@ -153,11 +157,12 @@ class SimCLR(object):
                 features = self.model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional representation)
                 if self.loss == "softce":
                     loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)
-                else:
+                elif self.loss == "infonce":
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
                     loss = self.criterion(logits, labels)
-
+                else:
+                    loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()
 
                 scaler.scale(loss).backward()
