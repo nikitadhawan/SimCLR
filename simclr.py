@@ -3,6 +3,7 @@ import os
 import sys
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
@@ -31,13 +32,26 @@ class SimCLR(object):
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
+        if stealing:
+            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
+        else:
+            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}TRAIN/"
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         self.loss = loss
-        if os.path.exists(os.path.join(self.log_dir, 'training.log')):
-            os.remove(os.path.join(self.log_dir, 'training.log'))
+        if os.path.exists(os.path.join(self.log_dir2, 'training.log')):
+            os.remove(os.path.join(self.log_dir2, 'training.log'))
+        else:
+            try:
+                try:
+                    os.mkdir(f"/checkpoint/{os.getenv('USER')}/SimCLR")
+                    os.mkdir(self.log_dir2)
+                except:
+                    os.mkdir(self.log_dir2)
+            except:
+                print(f"Error creating directory at {self.log_dir2}")
         logging.basicConfig(
-            filename=os.path.join(self.log_dir, 'training.log'),
+            filename=os.path.join(self.log_dir2, 'training.log'),
             level=logging.DEBUG)
         if self.stealing:
             self.victim_model = victim_model.to(self.args.device)
@@ -45,6 +59,12 @@ class SimCLR(object):
             self.criterion = soft_cross_entropy
         elif self.loss == "wasserstein":
             self.criterion = wasserstein_loss
+        elif self.loss == "mse":
+            self.criterion = nn.MSELoss()
+        elif self.loss == "bce":
+            self.criterion = nn.BCEWithLogitsLoss()
+        elif self.loss != "infonce":
+            raise RuntimeError(f"Loss function {self.loss} not supported.")
 
 
     def info_nce_loss(self, features):
@@ -77,7 +97,7 @@ class SimCLR(object):
         logits = torch.cat([positives, negatives], dim=1)
         labels = torch.zeros(logits.shape[0], dtype=torch.long).to(
             self.args.device)
-        logits = logits / self.args.temperature  # Do we need temperature scaling for soft CE loss?
+        logits = logits / self.args.temperature
         # print("labels", torch.sum(labels))
         # print("logits",logits)
         return logits, labels
@@ -87,7 +107,7 @@ class SimCLR(object):
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
-        save_config_file(self.log_dir, self.args)
+        save_config_file(self.log_dir2, self.args)
 
         n_iter = 0
         logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
@@ -117,7 +137,7 @@ class SimCLR(object):
             if epoch_counter >= 10:
                 self.scheduler.step()
             logging.debug(
-                f"Epoch: {epoch_counter}\tLoss: {loss}\tTop1 accuracy: {top1[0]}")
+                f"Epoch: {epoch_counter}\tLoss: {loss}\t")
 
         logging.info("Training has finished.")
         # save model checkpoints
@@ -129,8 +149,15 @@ class SimCLR(object):
             'optimizer': self.optimizer.state_dict(),
         }, is_best=False,
             filename=os.path.join(self.log_dir, checkpoint_name))
+        save_checkpoint({
+            'epoch': self.args.epochs,
+            'arch': self.args.arch,
+            'state_dict': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }, is_best=False,
+            filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
-            f"Model checkpoint and metadata has been saved at {self.log_dir}.")
+            f"Model checkpoint and metadata has been saved at {self.log_dir}")
 
     def steal(self, train_loader, num_queries):
         # Note: We use the test set to attack the model.
@@ -138,13 +165,12 @@ class SimCLR(object):
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
-        save_config_file(self.log_dir, self.args)
+        save_config_file(self.log_dir2, self.args)
 
         n_iter = 0
         logging.info(f"Start SimCLR stealing for {self.args.epochs} epochs.")
         logging.info(f"Using loss type: {self.loss}")
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
-
 
         for epoch_counter in range(self.args.epochs):
             total_queries = 0
@@ -152,7 +178,6 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 # Add augmentations / different querying strategies.
                 images = images.to(self.args.device)
-
                 query_features = self.victim_model(images) # victim model representations
                 features = self.model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional representation)
                 if self.loss == "softce":
@@ -161,6 +186,8 @@ class SimCLR(object):
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
                     loss = self.criterion(logits, labels)
+                elif self.loss == "bce":
+                    loss = self.criterion(features, torch.softmax(query_features, dim=1))
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()
@@ -183,10 +210,7 @@ class SimCLR(object):
 
         logging.info("Stealing has finished.")
         # save model checkpoints
-        if self.loss == "softce":
-            checkpoint_name = f'stolen_checkpoint_{self.args.epochs}.pth.tar'
-        else:
-            checkpoint_name = f'stolen_checkpoint_{self.args.epochs}_infonce.pth.tar'
+        checkpoint_name = f'stolen_checkpoint_{self.args.epochs}_{self.loss}.pth.tar'
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
@@ -194,5 +218,12 @@ class SimCLR(object):
             'optimizer': self.optimizer.state_dict(),
         }, is_best=False,
             filename=os.path.join(self.log_dir, checkpoint_name))
+        save_checkpoint({
+            'epoch': self.args.epochs,
+            'arch': self.args.arch,
+            'state_dict': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }, is_best=False,
+            filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
             f"Stolen model checkpoint and metadata has been saved at {self.log_dir}.")

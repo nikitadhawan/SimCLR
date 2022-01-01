@@ -34,14 +34,18 @@ parser.add_argument('--modeltype', default='stolen', type=str,
 parser.add_argument('--save', default='True', type=str,
                     help='Save final model', choices=['True', 'False'])
 parser.add_argument('--losstype', default='infonce', type=str,
-                    help='Loss function to use (softce or infonce)', choices=['softce', 'infonce'])
+                    help='Loss function to use.')
 
 args = parser.parse_args()
+if args.modeltype:
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+else:
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}TRAIN/"
 logname = f'testing{args.modeltype}.log'
-if os.path.exists(os.path.join('runs/eval' + '', logname)):
-    os.remove(os.path.join('runs/eval' + '', logname))
+if os.path.exists(os.path.join(log_dir, logname)):
+    os.remove(os.path.join(log_dir, logname))
 logging.basicConfig(
-    filename=os.path.join('runs/eval' + '', logname),
+    filename=os.path.join(log_dir, logname),
     level=logging.DEBUG)
 
 
@@ -65,17 +69,12 @@ def load_victim(epochs, dataset, model, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
-def load_stolen(epochs, dataset, model, device):
+def load_stolen(epochs, loss, model, device):
 
     print("Loading stolen model: ")
 
-    if args.losstype == "infonce":
-        checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_infonce.pth.tar', map_location=device)
-    else:
-        checkpoint = torch.load(
-            f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}.pth.tar',
-            map_location=device)
+    checkpoint = torch.load(
+    f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.
@@ -157,7 +156,7 @@ if args.modeltype == "victim":
                                          device=device)
     print("Evaluating victim")
 else:
-    model = load_stolen(args.epochs, args.dataset, model,
+    model = load_stolen(args.epochs, args.losstype, model,
                         device=device)
     print("Evaluating stolen model")
 

@@ -56,7 +56,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',
+parser.add_argument('--n-views', default=1, type=int, metavar='N',  # use 2 to use multiple augmentations. this will be important when using the head.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
@@ -64,7 +64,7 @@ parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
-                    help='Loss function to use', choices=['softce', 'infonce', 'wasserstein'])
+                    help='Loss function to use')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
@@ -85,13 +85,14 @@ def main():
         args.lr = 0.0003
         args.batch_size = 256
         args.weight_decay = 1e-4
+        args.n_views = 2
     dataset = RegularDataset(args.data)
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
 
     query_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
-    indxs = list(range(0, len(query_dataset) - 1000))
+    indxs = list(range(0, len(query_dataset) - 1000*args.n_views))
     query_dataset = torch.utils.data.Subset(query_dataset,
                                            indxs)  # query set (without last 1000 samples in the test set)
 

@@ -1,4 +1,4 @@
-# Other loss functions to try.
+# Other loss functions to try for the stealing process.
 
 import torch
 import torch.nn as nn
@@ -31,5 +31,17 @@ def wasserstein_loss(pred, target):
     # We consider f to be a function which gives the representation for the stolen model. We want to get E(f(x)) to be
     # as close to the real model
 
-    return torch.abs(torch.mean(torch.sigmoid(target)) -  torch.mean(torch.sigmoid(pred)))  # loss was negative so torch.abs added. It might also work with a negative loss.
+    return torch.mean(torch.softmax(target, dim=1)) -  torch.mean(torch.softmax(pred, dim=1))
+
+# https://lilianweng.github.io/lil-log/2021/05/31/contrastive-representation-learning.html#contrastive-training-objectives
+
+# Contrastive, triplet loss might not feasible as we do not know the actual labels and rather only the embedding.
+
+# NCE (Noise contrastive estimation):
+# https://github.com/demelin/Noise-Contrastive-Estimation-NCE-for-pyTorch/blob/master/nce_loss.py
+# Binary cross entropy loss is used here. We also wanted to use binary cross entropy loss for a comparison with multilabel.
+# https://pytorch.org/docs/stable/generated/torch.nn.BCELoss.html
+#nn.BCELoss
+
+# Soft nearest neighbours loss requires a class label and so is not feasible.
 
