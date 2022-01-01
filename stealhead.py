@@ -1,9 +1,6 @@
 # Steals the head when only given access to the representations.
-# This file first load the stolen model trained without the projection
-# head. It adds in the projection head to the architecture. Then
-# the model is trained in a standard way with the SimCLR method
-# with every layer but the last fc (which includes the head)
-# frozen.
+# This file first recreates the victim head g given access to its 
+# representations. 
 
 import torch
 import torch.nn as nn
@@ -24,7 +21,7 @@ import logging
 from torchvision import datasets
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
-from utils import save_config_file, accuracy, save_checkpoint
+from utils import save_config_file, save_checkpoint, load_victim
 
 
 
@@ -36,10 +33,13 @@ parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18')
+parser.add_argument('--archvic', default='resnet34')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
+parser.add_argument('--epochstrain', default=200, type=int,
+                    help='number of epochs victim was trained on')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
@@ -86,8 +86,6 @@ def info_nce_loss(features):
     labels = labels[~mask].view(labels.shape[0], -1)
     similarity_matrix = similarity_matrix[~mask].view(
         similarity_matrix.shape[0], -1)
-    # assert similarity_matrix.shape == labels.shape
-    # select and combine multiple positives
     positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
 
     # select only the negatives
@@ -97,8 +95,6 @@ def info_nce_loss(features):
     labels = torch.zeros(logits.shape[0], dtype=torch.long).to(
         device)
     logits = logits / args.temperature
-    # print("labels", torch.sum(labels))
-    # print("logits",logits)
     return logits, labels
 
 
@@ -117,11 +113,15 @@ if __name__ == "__main__":
         query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-
-    print("Loading stolen model: ")
+    victim_model = ResNetSimCLR(base_model=args.archvic,
+                                  out_dim=args.out_dim, include_mlp=False).to(device)
+    victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                             device=device, discard_mlp=True)
+    print(victim_model) 
+    print("Loaded victim")
 
     stolen_model = ResNetSimCLR(base_model=args.arch,
-                                out_dim=args.out_dim, include_mlp = True).to(device)
+                                out_dim=args.out_dim, include_mlp=True).to(device)
     checkpoint = torch.load(
     f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{args.epochs}_{args.losstype}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']

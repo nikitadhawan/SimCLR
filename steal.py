@@ -105,7 +105,7 @@ def main():
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     victim_model = ResNetSimCLR(base_model=args.arch,
-                                  out_dim=args.out_dim).to(args.device)
+                                  out_dim=args.out_dim, include_mlp=False).to(args.device)
     if args.victimhead == "False":
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                              device=args.device, discard_mlp=True)

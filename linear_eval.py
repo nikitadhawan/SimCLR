@@ -29,6 +29,8 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
+parser.add_argument('--lr', default=1e-4, type=float,
+                    help='learning rate to train the model with.')
 parser.add_argument('--modeltype', default='stolen', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
 parser.add_argument('--save', default='True', type=str,
@@ -37,7 +39,7 @@ parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
 
 args = parser.parse_args()
-if args.modeltype:
+if args.modeltype == "stolen":
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
 else:
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}TRAIN/"
@@ -178,7 +180,7 @@ if args.modeltype == "victim":
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 else:
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4,
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                  weight_decay=0.0008)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 epochs = 100

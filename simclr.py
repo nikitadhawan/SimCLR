@@ -179,7 +179,7 @@ class SimCLR(object):
                 # Add augmentations / different querying strategies.
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                features = self.model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional representation)
+                features = self.model(images) # current stolen model representation: 512x512 (512 images, 512 dimensional representation)
                 if self.loss == "softce":
                     loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)
                 elif self.loss == "infonce":
