@@ -31,7 +31,7 @@ def wasserstein_loss(pred, target):
     # We consider f to be a function which gives the representation for the stolen model. We want to get E(f(x)) to be
     # as close to the real model
 
-    return torch.mean(torch.softmax(target, dim=1)) -  torch.mean(torch.softmax(pred, dim=1))
+    return torch.mean(pred) -  torch.mean(target)
 
 # https://lilianweng.github.io/lil-log/2021/05/31/contrastive-representation-learning.html#contrastive-training-objectives
 

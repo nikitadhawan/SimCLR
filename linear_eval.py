@@ -37,10 +37,15 @@ parser.add_argument('--save', default='True', type=str,
                     help='Save final model', choices=['True', 'False'])
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
+parser.add_argument('--head', default='False', type=str,
+                    help='stolen model was trained using recreated head.')
 
 args = parser.parse_args()
 if args.modeltype == "stolen":
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+    if args.head == "False":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+    else:
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"  
 else:
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}TRAIN/"
 logname = f'testing{args.modeltype}.log'
@@ -75,8 +80,12 @@ def load_stolen(epochs, loss, model, device):
 
     print("Loading stolen model: ")
 
-    checkpoint = torch.load(
-    f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
+    if args.head == "False":
+        checkpoint = torch.load(
+        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
+    else:
+        checkpoint = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.

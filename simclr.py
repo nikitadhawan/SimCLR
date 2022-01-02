@@ -103,7 +103,6 @@ class SimCLR(object):
         return logits, labels
 
     def train(self, train_loader):
-
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -161,7 +160,8 @@ class SimCLR(object):
 
     def steal(self, train_loader, num_queries):
         # Note: We use the test set to attack the model.
-
+        self.model.train()
+        self.victim_model.eval() # can remove these lines
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -176,10 +176,9 @@ class SimCLR(object):
             total_queries = 0
             for images, _ in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
-                # Add augmentations / different querying strategies.
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                features = self.model(images) # current stolen model representation: 512x512 (512 images, 512 dimensional representation)
+                features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
                     loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)
                 elif self.loss == "infonce":
@@ -187,7 +186,7 @@ class SimCLR(object):
                     logits, labels = self.info_nce_loss(all_features)
                     loss = self.criterion(logits, labels)
                 elif self.loss == "bce":
-                    loss = self.criterion(features, torch.softmax(query_features, dim=1))
+                    loss = self.criterion(features, torch.round(torch.sigmoid(query_features))) # torch.round to convert it to one hot style representation
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()

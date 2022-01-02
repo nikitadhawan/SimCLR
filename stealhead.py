@@ -10,12 +10,10 @@ from tqdm import tqdm
 import sys
 import numpy as np
 import os
-import yaml
 import matplotlib.pyplot as plt
-import torchvision
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLR
+from models.resnet_simclr import ResNetSimCLR, HeadSimCLR
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
@@ -47,6 +45,8 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.0003, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
+parser.add_argument('--lrhead', default=0.001, type=float,
+                    help='initial learning rate for training head')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
@@ -117,27 +117,10 @@ if __name__ == "__main__":
                                   out_dim=args.out_dim, include_mlp=False).to(device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                              device=device, discard_mlp=True)
-    print(victim_model) 
+    victim_model.eval()
     print("Loaded victim")
-
-    stolen_model = ResNetSimCLR(base_model=args.arch,
-                                out_dim=args.out_dim, include_mlp=True).to(device)
-    checkpoint = torch.load(
-    f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{args.epochs}_{args.losstype}.pth.tar', map_location=device)
-    state_dict = checkpoint['state_dict']
-    for k in list(state_dict.keys()):
-        if k.startswith('backbone.'):
-            if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                # remove prefix
-                state_dict[k[len("backbone."):]] = state_dict[k]
-        del state_dict[k]
-
-    stolen_model.load_state_dict(state_dict, strict=False)
-    # freeze all layers but the last two i.e. the head and the final layer
-    for name, param in stolen_model.named_parameters():
-        if name not in ['backbone.fc.0.weight', 'backbone.fc.2.weight', 'backbone.fc.0.bias', 'backbone.fc.2.bias']:
-            param.requires_grad = False
-    print("Loaded model")
+    head = HeadSimCLR(out_dim=args.out_dim).to(device)
+    print("Initialized head")
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
     if os.path.exists(os.path.join(log_dir, 'training.log')):
         os.remove(os.path.join(log_dir, 'training.log'))
@@ -153,9 +136,9 @@ if __name__ == "__main__":
 
     save_config_file(log_dir,args)
     n_iter = 0
-    logging.info(f"Start SimCLR training for {args.epochs} epochs.")
+    logging.info(f"Start Head training for {args.epochs} epochs.")
     logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
-    optimizer = torch.optim.Adam(stolen_model.parameters(), args.lr,
+    optimizer = torch.optim.Adam(head.parameters(), args.lrhead,
                                  weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
@@ -163,12 +146,14 @@ if __name__ == "__main__":
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
     for epoch_counter in range(args.epochs):
+        total_queries = 0
         for images, _ in tqdm(query_loader):
             images = torch.cat(images, dim=0)
 
             images = images.to(device)
 
-            features = stolen_model(images)
+            rep = victim_model(images) # h from victim
+            features = head(rep)
             logits, labels = info_nce_loss(features)
             loss = criterion(logits, labels)
 
@@ -180,6 +165,9 @@ if __name__ == "__main__":
             scaler.update()
 
             n_iter += 1
+            total_queries += len(images)
+            if total_queries >= args.num_queries:
+                break
 
         # warmup for the first 10 epochs
         if epoch_counter >= 10:
@@ -187,9 +175,74 @@ if __name__ == "__main__":
         logging.debug(
             f"Epoch: {epoch_counter}\tLoss: {loss}\t")
 
-    logging.info("Training has finished.")
+    logging.info("Head training has finished.")
     #save model checkpoints
     checkpoint_name = f'{args.dataset}_checkpoint_{args.epochs}_head.pth.tar'
+    save_checkpoint({
+        'epoch': args.epochs,
+        'arch': args.arch,
+        'state_dict': head.state_dict(),
+        'optimizer': optimizer.state_dict(),
+    }, is_best=False,
+        filename=os.path.join(log_dir, checkpoint_name))
+    logging.info(
+        f"Head checkpoint and metadata has been saved at {log_dir}")
+
+    # Stealing loop with recreated head from the victim.
+    head.eval()
+
+    stolen_model = ResNetSimCLR(base_model=args.arch,
+                            out_dim=args.out_dim, include_mlp=True).to(device)
+
+    optimizer = torch.optim.Adam(stolen_model.parameters(), args.lr,   # Maybe change the optimizer
+                                 weight_decay=args.weight_decay)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
+        query_loader), eta_min=0,last_epoch=-1)
+
+    
+    scaler = GradScaler(enabled=args.fp16_precision)
+    logging.info(f"Start SimCLR stealing for {args.epochs} epochs.")
+    logging.info(f"Using loss type: {args.losstype}")
+    for epoch_counter in range(args.epochs):
+        total_queries = 0
+        for images, _ in tqdm(query_loader):
+            images = torch.cat(images, dim=0)
+            # Add augmentations / different querying strategies.
+            images = images.to(device)
+            query_features = victim_model(images) # victim model representations
+            query_features = head(query_features)
+            features = stolen_model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional output from head)
+            if args.losstype == "softce":
+                loss = criterion(features, F.softmax(query_features/args.temperature, dim=1)) # F.softmax(features, dim=1)
+            elif args.losstype == "infonce":
+                all_features = torch.cat([features, query_features], dim=0)
+                logits, labels = info_nce_loss(all_features)
+                loss = criterion(logits, labels)
+            elif args.losstype == "bce":
+                loss = criterion(features, torch.softmax(query_features, dim=1))
+            else:
+                loss = criterion(features, query_features)
+            optimizer.zero_grad()
+
+            scaler.scale(loss).backward()
+
+            scaler.step(optimizer)
+            scaler.update()
+
+            n_iter += 1
+            total_queries += len(images)
+            if total_queries >= args.num_queries:
+                break
+
+        # warmup for the first 10 epochs
+        if epoch_counter >= 10:
+            scheduler.step()
+        logging.debug(
+            f"Epoch: {epoch_counter}\tLoss: {loss}\t")
+    logging.info("Stealing has finished.")
+    # save model checkpoints
+    checkpoint_name = f'stolen_checkpoint_{args.epochs}_{args.losstype}.pth.tar'
     save_checkpoint({
         'epoch': args.epochs,
         'arch': args.arch,
@@ -198,4 +251,4 @@ if __name__ == "__main__":
     }, is_best=False,
         filename=os.path.join(log_dir, checkpoint_name))
     logging.info(
-        f"Model checkpoint and metadata has been saved at {log_dir}")
+            f"Stolen model checkpoint and metadata has been saved at {log_dir}.")
