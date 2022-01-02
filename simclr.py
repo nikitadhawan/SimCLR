@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from loss import wasserstein_loss
+from loss import wasserstein_loss, soft_nn_loss, pairwise_euclid_distance
 
 torch.manual_seed(0)
 
@@ -63,6 +63,8 @@ class SimCLR(object):
             self.criterion = nn.MSELoss()
         elif self.loss == "bce":
             self.criterion = nn.BCEWithLogitsLoss()
+        elif self.loss == "softnn":
+            self.criterion = soft_nn_loss
         elif self.loss != "infonce":
             raise RuntimeError(f"Loss function {self.loss} not supported.")
 
@@ -187,6 +189,9 @@ class SimCLR(object):
                     loss = self.criterion(logits, labels)
                 elif self.loss == "bce":
                     loss = self.criterion(features, torch.round(torch.sigmoid(query_features))) # torch.round to convert it to one hot style representation
+                elif self.loss == "softnn":
+                    all_features = torch.cat([features, query_features], dim=0)
+                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, 10000)
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()
