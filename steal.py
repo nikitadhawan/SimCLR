@@ -54,6 +54,8 @@ parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
+parser.add_argument('--temperaturesn', default=100, type=float,
+                    help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--n-views', default=1, type=int, metavar='N',  # use 2 to use multiple augmentations. this will be important when using the head.

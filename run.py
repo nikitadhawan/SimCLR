@@ -45,9 +45,13 @@ parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
+parser.add_argument('--temperaturesn', default=100, type=float,
+                    help='temperature for soft nearest neighbors loss')
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
+parser.add_argument('--losstype', default='infonce', type=str,
+                    help='Loss function to use')
 
 
 def main():
@@ -82,7 +86,7 @@ def main():
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
         simclr = SimCLR(model=model, optimizer=optimizer, scheduler=scheduler,
-                        args=args)
+                        args=args, loss=args.losstype)
         simclr.train(train_loader)
 
 

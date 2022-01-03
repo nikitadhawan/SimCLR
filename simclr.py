@@ -65,6 +65,7 @@ class SimCLR(object):
             self.criterion = nn.BCEWithLogitsLoss()
         elif self.loss == "softnn":
             self.criterion = soft_nn_loss
+            self.tempsn = self.args.temperaturesn
         elif self.loss != "infonce":
             raise RuntimeError(f"Loss function {self.loss} not supported.")
 
@@ -123,7 +124,11 @@ class SimCLR(object):
                 with autocast(enabled=self.args.fp16_precision):
                     features = self.model(images)
                     logits, labels = self.info_nce_loss(features)
-                    loss = self.criterion(logits, labels)
+                    if self.loss == "softnn":
+                        loss = self.criterion(self.args, features,
+                                              pairwise_euclid_distance, self.tempsn)
+                    else:
+                        loss = self.criterion(logits, labels)
 
                 self.optimizer.zero_grad()
 
@@ -191,7 +196,7 @@ class SimCLR(object):
                     loss = self.criterion(features, torch.round(torch.sigmoid(query_features))) # torch.round to convert it to one hot style representation
                 elif self.loss == "softnn":
                     all_features = torch.cat([features, query_features], dim=0)
-                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, 100)
+                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, self.tempsn)
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()
