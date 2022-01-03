@@ -191,7 +191,7 @@ class SimCLR(object):
                     loss = self.criterion(features, torch.round(torch.sigmoid(query_features))) # torch.round to convert it to one hot style representation
                 elif self.loss == "softnn":
                     all_features = torch.cat([features, query_features], dim=0)
-                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, 10000)
+                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, 100)
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()

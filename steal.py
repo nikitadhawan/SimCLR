@@ -81,11 +81,12 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
-    if args.losstype == "infonce":
-        args.lr = 0.0003
+    if args.losstype in  ["infonce", "softnn"]:
         args.batch_size = 256
         args.weight_decay = 1e-4
         args.n_views = 2
+    if args.losstype == "infonce":
+        args.lr = 0.0003
     dataset = RegularDataset(args.data)
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
@@ -123,8 +124,7 @@ def main():
                                  weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
-        train_loader), eta_min=0,
-                                                           last_epoch=-1)
+        train_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
         simclr = SimCLR(stealing=True, victim_model=victim_model,

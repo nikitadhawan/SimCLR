@@ -43,8 +43,7 @@ def wasserstein_loss(pred, target):
 # https://pytorch.org/docs/stable/generated/torch.nn.BCELoss.html
 #nn.BCELoss
 
-# Soft nearest neighbours Loss: 
-# Can do something Similar to the approach in Section 4.2 Step 2 to use SNNL for representations https://www.usenix.org/system/files/sec21fall-jia.pdf for the labels to use
+# Soft nearest neighbours Loss:
 # https://arxiv.org/pdf/1902.01889.pdf , https://twitter.com/nickfrosst/status/1093581702453231623
 # https://github.com/tensorflow/similarity/tree/master/tensorflow_similarity/losses
 #https://github.com/tensorflow/similarity/pull/203/commits/c7b5304be9c7df40297aa8382d28400ba94337c8#diff-6fb616049a9a9c0d7cc4dc686ec1746520039c9845fa7fbf9d291054b222ca18
@@ -61,7 +60,7 @@ def build_masks(labels,
         Tuple of Tensors containing the positive_mask and negative_mask
     """
     if np.ndim(labels) == 1:
-        labels = tf.reshape(labels, (-1, 1))
+        labels = torch.reshape(labels, (-1, 1))
 
     # same class mask
     positive_mask = (labels == labels.T).to(torch.bool)
@@ -75,29 +74,29 @@ def build_masks(labels,
     return positive_mask, negative_mask
 
 def pairwise_euclid_distance(a, b):
-        STABILITY_EPS = 0.00001
-        a = a.double()
-        b = b.double()
+    STABILITY_EPS = 0.00001
+    a = a.double()
+    b = b.double()
 
-        batch_a = a.shape[0]
-        batch_b = b.shape[0]
+    batch_a = a.shape[0]
+    batch_b = b.shape[0]
 
-        sqr_norm_a = torch.pow(a, 2).sum(dim=1).view(1,
-                                                      batch_a) + STABILITY_EPS
-        sqr_norm_b = torch.pow(b, 2).sum(dim=1).view(batch_b,
-                                                      1) + STABILITY_EPS
+    sqr_norm_a = torch.pow(a, 2).sum(dim=1).view(1,
+                                                  batch_a) + STABILITY_EPS
+    sqr_norm_b = torch.pow(b, 2).sum(dim=1).view(batch_b,
+                                                  1) + STABILITY_EPS
 
-        tile_1 = sqr_norm_a.repeat([batch_a, 1])
-        tile_2 = sqr_norm_b.repeat([1, batch_b])
+    tile_1 = sqr_norm_a.repeat([batch_a, 1])
+    tile_2 = sqr_norm_b.repeat([1, batch_b])
 
-        inner_prod = torch.matmul(b, a.T) + STABILITY_EPS
-        dist = tile_1 + tile_2 - 2 * inner_prod
-        return dist
+    inner_prod = torch.matmul(b, a.T) + STABILITY_EPS
+    dist = tile_1 + tile_2 - 2 * inner_prod
+    return dist
 
 def soft_nn_loss(args,
                  features,
                  distance,
-                 temperature):
+                 temperature=10000):
     """Computes the soft nearest neighbors loss.
     Args:
         labels: Labels associated with features. (now calculated in code below)
@@ -113,7 +112,7 @@ def soft_nn_loss(args,
     n = int(features.size()[0] / args.batch_size) # I think number of augmentations. Need to update code below based on this
     labels = torch.cat(
             [torch.arange(args.batch_size) for i in range(n)], dim=0)
-    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    #labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
     eps = 1e-9
     # might need to make labels manually as is done in info_nce_loss(). 
     pairwise_dist = distance(features, features)
