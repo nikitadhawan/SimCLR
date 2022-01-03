@@ -185,6 +185,8 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
+                if self.args.defence == "True":
+                    query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                 features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
                     loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)

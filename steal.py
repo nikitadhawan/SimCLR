@@ -71,6 +71,8 @@ parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
                     help='Use an additional head while training the stolen model.', choices=['True', 'False'])
+parser.add_argument('--defence', default='False', type=str,
+                    help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
 
 
 def main():
