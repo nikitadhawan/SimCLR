@@ -69,6 +69,8 @@ parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
+parser.add_argument('--lossvictim', default='supcon', type=str,
+                    help='Loss function victim was trained with')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
@@ -115,21 +117,21 @@ def main():
 
     if args.victimhead == "False":
         victim_model = ResNetSimCLR(base_model=args.arch,
-                                    out_dim=args.out_dim, include_mlp=False).to(
+                                    out_dim=args.out_dim, loss=args.lossvictim, include_mlp=False).to(
             args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model, args.arch, args.lossvictim,
                                              device=args.device, discard_mlp=True)
     else:
         victim_model = ResNetSimCLR(base_model=args.arch,
-                                    out_dim=args.out_dim, include_mlp=True).to(
+                                    out_dim=args.out_dim, loss=args.lossvictim, include_mlp=True).to(
             args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,args.arch, args.lossvictim,
                                    device=args.device, discard_mlp=False)
     if args.stolenhead == "False":
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim,
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim,
                              include_mlp=False)
     else:
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim,
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim,
                              include_mlp=True)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer

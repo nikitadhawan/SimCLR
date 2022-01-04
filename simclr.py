@@ -68,6 +68,8 @@ class SimCLR(object):
             self.tempsn = self.args.temperaturesn
         elif self.loss == "supcon":
             self.criterion = SupConLoss(temperature=self.args.temperature)
+        elif self.loss == "symmetrized":
+            self.criterion = nn.CosineSimilarity(dim=1)
         elif self.loss != "infonce":
             raise RuntimeError(f"Loss function {self.loss} not supported.")
 
@@ -130,7 +132,7 @@ class SimCLR(object):
                         loss = self.criterion(self.args, features,
                                               pairwise_euclid_distance, self.tempsn)
                     elif self.loss == "supcon":
-                        features = F.normalize(features, dim=1)
+                        #features = F.normalize(features, dim=1) not needed anymore since it is in the model definition
                         labels = truelabels
                         bsz = labels.shape[0]
                         f1, f2 = torch.split(features, [bsz, bsz], dim=0)
@@ -211,13 +213,29 @@ class SimCLR(object):
                     all_features = torch.cat([features, query_features], dim=0)
                     loss = self.criterion(self.args, all_features, pairwise_euclid_distance, self.tempsn)
                 elif self.loss == "supcon":
-                    all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
+                    #all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
+                    all_features = torch.cat([features,query_features], dim=0)
                     labels = truelabels.repeat(2) # for victim and stolen features
                     bsz = labels.shape[0]
                     f1, f2 = torch.split(all_features, [bsz, bsz], dim=0)
                     all_features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)],
                                          dim=1)
                     loss = self.criterion(all_features, labels)
+                elif self.loss == "symmetrized":
+                    #https://github.com/facebookresearch/simsiam/blob/main/main_simsiam.py#L294
+                    # p is the output from the predictor (i.e. stolen model in this case)
+                    # z is the output from the victim model (so the direct representation)
+                    # when initializing, we need to include head for stolen, not for victim and set out_dim = 512
+                    # might need to change the loader for how to get different augmentations of the same image
+                    x1 = images[0]
+                    x2 = images[1] # placeholder. need to change to get the specific images from each augmentation
+                    p1 =  self.model(x1)
+                    p2 = self.model(x2) # output from stolen model for each augmentation (including head)
+                    z1 = self.victim_model(x1)
+                    z2 = self.victim_model(x2) # raw representations from victim
+                    loss = -(criterion(p1, z2).mean() + criterion(p2,
+                                                                  z1).mean()) * 0.5
+
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()

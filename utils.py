@@ -37,9 +37,12 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def load_victim(epochs, dataset, model, device, discard_mlp=False):
+def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False):
     checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+        map_location=device)
+    # checkpoint = torch.load(
+    #     f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
 
     if discard_mlp:
