@@ -66,6 +66,9 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
+    if args.losstype == "supcon":
+        args.lr = 0.05
+
     dataset = ContrastiveLearningDataset(args.data)
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)

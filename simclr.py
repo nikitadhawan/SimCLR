@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from loss import wasserstein_loss, soft_nn_loss, pairwise_euclid_distance
+from loss import wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss
 
 torch.manual_seed(0)
 
@@ -35,7 +35,7 @@ class SimCLR(object):
         if stealing:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
         else:
-            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}TRAIN/"
+            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         self.loss = loss
@@ -66,6 +66,8 @@ class SimCLR(object):
         elif self.loss == "softnn":
             self.criterion = soft_nn_loss
             self.tempsn = self.args.temperaturesn
+        elif self.loss == "supcon":
+            self.criterion = SupConLoss(temperature=self.args.temperature)
         elif self.loss != "infonce":
             raise RuntimeError(f"Loss function {self.loss} not supported.")
 
@@ -116,7 +118,7 @@ class SimCLR(object):
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
 
         for epoch_counter in range(self.args.epochs):
-            for images, _ in tqdm(train_loader):
+            for images, truelabels in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
 
                 images = images.to(self.args.device)
@@ -127,6 +129,15 @@ class SimCLR(object):
                     if self.loss == "softnn":
                         loss = self.criterion(self.args, features,
                                               pairwise_euclid_distance, self.tempsn)
+                    elif self.loss == "supcon":
+                        features = F.normalize(features, dim=1)
+                        labels = truelabels
+                        bsz = labels.shape[0]
+                        f1, f2 = torch.split(features, [bsz, bsz], dim=0)
+                        features = torch.cat(
+                            [f1.unsqueeze(1), f2.unsqueeze(1)],
+                            dim=1)
+                        loss = self.criterion(features, labels)
                     else:
                         loss = self.criterion(logits, labels)
 
@@ -147,7 +158,7 @@ class SimCLR(object):
 
         logging.info("Training has finished.")
         # save model checkpoints
-        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}.pth.tar'
+        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
@@ -181,7 +192,7 @@ class SimCLR(object):
 
         for epoch_counter in range(self.args.epochs):
             total_queries = 0
-            for images, _ in tqdm(train_loader):
+            for images, truelabels in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
@@ -199,6 +210,14 @@ class SimCLR(object):
                 elif self.loss == "softnn":
                     all_features = torch.cat([features, query_features], dim=0)
                     loss = self.criterion(self.args, all_features, pairwise_euclid_distance, self.tempsn)
+                elif self.loss == "supcon":
+                    all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
+                    labels = truelabels.repeat(2) # for victim and stolen features
+                    bsz = labels.shape[0]
+                    f1, f2 = torch.split(all_features, [bsz, bsz], dim=0)
+                    all_features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)],
+                                         dim=1)
+                    loss = self.criterion(all_features, labels)
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()

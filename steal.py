@@ -58,7 +58,7 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=1, type=int, metavar='N',  # use 2 to use multiple augmentations. this will be important when using the head.
+parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations. this will be important when using the head.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
@@ -85,12 +85,14 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
-    if args.losstype in  ["infonce", "softnn"]:
+    if args.losstype in  ["infonce", "softnn", "supcon"]:
         args.batch_size = 256
         args.weight_decay = 1e-4
         args.n_views = 2
     if args.losstype == "infonce":
         args.lr = 0.0003
+    if args.losstype == "supcon":
+        args.lr = 0.05
     dataset = RegularDataset(args.data)
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
@@ -109,12 +111,16 @@ def main():
         query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    victim_model = ResNetSimCLR(base_model=args.arch,
-                                  out_dim=args.out_dim, include_mlp=False).to(args.device)
     if args.victimhead == "False":
+        victim_model = ResNetSimCLR(base_model=args.arch,
+                                    out_dim=args.out_dim, include_mlp=False).to(
+            args.device)
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                              device=args.device, discard_mlp=True)
     else:
+        victim_model = ResNetSimCLR(base_model=args.arch,
+                                    out_dim=args.out_dim, include_mlp=True).to(
+            args.device)
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                    device=args.device, discard_mlp=False)
     if args.stolenhead == "False":
