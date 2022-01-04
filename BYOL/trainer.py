@@ -3,8 +3,6 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-
 from utils import _create_model_training_folder
 
 
@@ -16,12 +14,12 @@ class BYOLTrainer:
         self.device = device
         self.predictor = predictor
         self.max_epochs = params['max_epochs']
-        self.writer = SummaryWriter()
+        self.log_dir = f"/checkpoint/{os.getenv('USER')}/BYOL/"
         self.m = params['m']
         self.batch_size = params['batch_size']
         self.num_workers = params['num_workers']
         self.checkpoint_interval = params['checkpoint_interval']
-        _create_model_training_folder(self.writer, files_to_same=["./config/config.yaml", "main.py", 'trainer.py'])
+        _create_model_training_folder(self.log_dir, files_to_same=["./config/config.yaml", "main.py", 'trainer.py'])
 
     @torch.no_grad()
     def _update_target_network_parameters(self):
@@ -35,7 +33,7 @@ class BYOLTrainer:
     def regression_loss(x, y):
         x = F.normalize(x, dim=1)
         y = F.normalize(y, dim=1)
-        return 2 - 2 * (x * y).sum(dim=-1)
+        return 2 - 2 * (x * y).sum(dim=-1) # Mean squared error
 
     def initializes_target_network(self):
         # init momentum network as encoder net
@@ -49,26 +47,18 @@ class BYOLTrainer:
                                   num_workers=self.num_workers, drop_last=False, shuffle=True)
 
         niter = 0
-        model_checkpoints_folder = os.path.join(self.writer.log_dir, 'checkpoints')
+        model_checkpoints_folder = os.path.join(self.log_dir, 'checkpoints')
 
         self.initializes_target_network()
 
         for epoch_counter in range(self.max_epochs):
-
+            print("Start epoch {}".format(epoch_counter))
             for (batch_view_1, batch_view_2), _ in train_loader:
 
                 batch_view_1 = batch_view_1.to(self.device)
                 batch_view_2 = batch_view_2.to(self.device)
 
-                if niter == 0:
-                    grid = torchvision.utils.make_grid(batch_view_1[:32])
-                    self.writer.add_image('views_1', grid, global_step=niter)
-
-                    grid = torchvision.utils.make_grid(batch_view_2[:32])
-                    self.writer.add_image('views_2', grid, global_step=niter)
-
                 loss = self.update(batch_view_1, batch_view_2)
-                self.writer.add_scalar('loss', loss, global_step=niter)
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -78,6 +68,7 @@ class BYOLTrainer:
                 niter += 1
 
             print("End of epoch {}".format(epoch_counter))
+            print("Loss {}".format(loss))
 
         # save checkpoints
         self.save_model(os.path.join(model_checkpoints_folder, 'model.pth'))

@@ -17,7 +17,7 @@ trainer:
   m: 0.996 # momentum update
   checkpoint_interval: 5000
   max_epochs: 40
-  num_workers: 4
+  num_workers: 2
 
 optimizer:
   params:

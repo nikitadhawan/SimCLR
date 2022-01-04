@@ -40,6 +40,8 @@ parser.add_argument('-b', '--batch-size', default=64, type=int,
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
+parser.add_argument('--momentum', type=float, default=0.9,
+                        help='momentum')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
@@ -132,6 +134,11 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
+
+    if args.losstype == "supcon":
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
         train_loader), eta_min=0,last_epoch=-1)

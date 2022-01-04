@@ -33,7 +33,7 @@ parser.add_argument('--lr', default=1e-4, type=float,
                     help='learning rate to train the model with.')
 parser.add_argument('--modeltype', default='stolen', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
-parser.add_argument('--save', default='True', type=str,
+parser.add_argument('--save', default='False', type=str,
                     help='Save final model', choices=['True', 'False'])
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
@@ -47,7 +47,8 @@ if args.modeltype == "stolen":
     else:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"  
 else:
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}TRAIN/"
+    args.arch = "resnet34"
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
 logname = f'testing{args.modeltype}.log'
 if os.path.exists(os.path.join(log_dir, logname)):
     os.remove(os.path.join(log_dir, logname))
@@ -56,12 +57,14 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 
-def load_victim(epochs, dataset, model, device):
+def load_victim(epochs, dataset, model, loss, device):
 
     print("Loading victim model: ")
-
     checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+        map_location=device)
+    # checkpoint = torch.load(
+    #     f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
 
     # Remove head.
@@ -163,7 +166,7 @@ elif args.arch == 'resnet50':
     model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
 
 if args.modeltype == "victim":
-    model = load_victim(args.epochstrain, args.dataset, model,
+    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,
                                          device=device)
     print("Evaluating victim")
 else:
