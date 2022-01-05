@@ -15,23 +15,72 @@ import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 
-
+# soft cross entropy
+def soft_cross_entropy(pred, soft_targets, weights=None):
+    if weights is not None:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
+                      1))
+    else:
+        return torch.mean(
+            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
 # Wasserstein:
-# https://github.com/tensorflow/gan/blob/master/tensorflow_gan/python/losses/losses_impl.py#L71
-#https://lilianweng.github.io/lil-log/2017/08/20/from-GAN-to-WGAN.html#wasserstein-gan-wgan
-# https://github.com/lilianweng/unified-gan-tensorflow/blob/317c1b6ec4d00db0d486dfce2965cb27156d334d/model.py#L169
 
-def wasserstein_loss(pred, target):
-    """
-    pred is the representation output from the stolen model.
-    target is the representation obtained from the victim model (h)
-    """
-    # Need to check if this implementation is correct as the setting here is slightly different (no seperate generator)
-    # We consider f to be a function which gives the representation for the stolen model. We want to get E(f(x)) to be
-    # as close to the real model
+def torch_wasserstein_loss(tensor_a, tensor_b):
+    # Compute the first Wasserstein distance between two 1D distributions.
+    return (torch_cdf_loss(tensor_a, tensor_b, p=1))
 
-    return torch.mean(pred) -  torch.mean(target)
+
+def torch_energy_loss(tensor_a, tensor_b):
+    # Compute the energy distance between two 1D distributions.
+    return ((2 ** 0.5) * torch_cdf_loss(tensor_a, tensor_b, p=2))
+
+
+def torch_cdf_loss(tensor_a, tensor_b, p=1):
+    # last-dimension is weight distribution
+    # p is the norm of the distance, p=1 --> First Wasserstein Distance
+    # to get a positive weight with our normalized distribution
+    # we recommend combining this loss with other difference-based losses like L1
+
+    # normalize distribution, add 1e-14 to divisor to avoid 0/0
+    tensor_a = tensor_a / (torch.sum(tensor_a, dim=-1, keepdim=True) + 1e-14)
+    tensor_b = tensor_b / (torch.sum(tensor_b, dim=-1, keepdim=True) + 1e-14)
+    # make cdf with cumsum
+    cdf_tensor_a = torch.cumsum(tensor_a, dim=-1)
+    cdf_tensor_b = torch.cumsum(tensor_b, dim=-1)
+
+    # choose different formulas for different norm situations
+    if p == 1:
+        cdf_distance = torch.sum(torch.abs((cdf_tensor_a - cdf_tensor_b)),
+                                 dim=-1)
+    elif p == 2:
+        cdf_distance = torch.sqrt(
+            torch.sum(torch.pow((cdf_tensor_a - cdf_tensor_b), 2), dim=-1))
+    else:
+        cdf_distance = torch.pow(
+            torch.sum(torch.pow(torch.abs(cdf_tensor_a - cdf_tensor_b), p),
+                      dim=-1), 1 / p)
+
+    cdf_loss = cdf_distance.mean()
+    return cdf_loss
+
+
+def torch_validate_distibution(tensor_a, tensor_b):
+    # Zero sized dimension is not supported by pytorch, we suppose there is no empty inputs
+    # Weights should be non-negetive, and with a positive and finite sum
+    # We suppose all conditions will be corrected by network training
+    # We only check the match of the size here
+    if tensor_a.size() != tensor_b.size():
+        raise ValueError("Input weight tensors must be of the same size")
+
+
+class wasserstein_loss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, tensor_a, tensor_b):
+        return torch_wasserstein_loss(tensor_a, tensor_b)
 
 # https://lilianweng.github.io/lil-log/2021/05/31/contrastive-representation-learning.html#contrastive-training-objectives
 
@@ -232,4 +281,13 @@ class SupConLoss(nn.Module):
         loss = loss.view(anchor_count, batch_size).mean()
         return loss
 
+def neg_cosine(p, z): # negative cosine similarity
+    z = z.detach() # stop gradient
+    p = F.normalize(p, dim=1) # l2-normalize
+    z = F.normalize(z, dim=1) # l2-normalize
+    return -(p*z).sum(dim=1).mean()
 
+def regression_loss(p, z):
+    p = F.normalize(p, dim=1)
+    z = F.normalize(z, dim=1)
+    return 2 - 2 * (p * z).sum(dim=-1)

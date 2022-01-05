@@ -85,7 +85,9 @@ def load_stolen(epochs, loss, model, device):
 
     if args.head == "False":
         checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
+        # checkpoint = torch.load(
+        # f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
     else:
         checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)

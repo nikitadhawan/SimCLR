@@ -8,20 +8,9 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from loss import wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss
+from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss
 
 torch.manual_seed(0)
-
-
-def soft_cross_entropy(pred, soft_targets, weights=None):
-    if weights is not None:
-        return torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
-                      1))
-    else:
-        return torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
-
 
 class SimCLR(object):
 
@@ -58,7 +47,7 @@ class SimCLR(object):
         if self.loss == "softce":
             self.criterion = soft_cross_entropy
         elif self.loss == "wasserstein":
-            self.criterion = wasserstein_loss
+            self.criterion = wasserstein_loss()
         elif self.loss == "mse":
             self.criterion = nn.MSELoss()
         elif self.loss == "bce":
@@ -181,7 +170,7 @@ class SimCLR(object):
     def steal(self, train_loader, num_queries):
         # Note: We use the test set to attack the model.
         self.model.train()
-        self.victim_model.eval() # can remove these lines
+        self.victim_model.eval() 
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -202,7 +191,7 @@ class SimCLR(object):
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                 features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
-                    loss = self.criterion(features, F.softmax(query_features/self.args.temperature, dim=1)) # F.softmax(features, dim=1)
+                    loss = self.criterion(features,F.softmax(features, dim=1))  #  F.softmax(query_features/self.args.temperature, dim=1))
                 elif self.loss == "infonce":
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
@@ -213,8 +202,7 @@ class SimCLR(object):
                     all_features = torch.cat([features, query_features], dim=0)
                     loss = self.criterion(self.args, all_features, pairwise_euclid_distance, self.tempsn)
                 elif self.loss == "supcon":
-                    #all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
-                    all_features = torch.cat([features,query_features], dim=0)
+                    all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
                     labels = truelabels.repeat(2) # for victim and stolen features
                     bsz = labels.shape[0]
                     f1, f2 = torch.split(all_features, [bsz, bsz], dim=0)
@@ -226,15 +214,20 @@ class SimCLR(object):
                     # p is the output from the predictor (i.e. stolen model in this case)
                     # z is the output from the victim model (so the direct representation)
                     # when initializing, we need to include head for stolen, not for victim and set out_dim = 512
-                    # might need to change the loader for how to get different augmentations of the same image
-                    x1 = images[0]
-                    x2 = images[1] # placeholder. need to change to get the specific images from each augmentation
-                    p1 =  self.model(x1)
-                    p2 = self.model(x2) # output from stolen model for each augmentation (including head)
+                    # first half of images includes all images under the first augmentation, second half includes under the second augmentation
+                    x1 = images[:int(len(images)/2)]
+                    x2 = images[int(len(images)/2):]
+                    # p1 =  self.model(x1)
+                    # p2 = self.model(x2) # output from stolen model for each augmentation (including head)
+                    p1, p2, _, _ = self.model(x1, x2)
                     z1 = self.victim_model(x1)
                     z2 = self.victim_model(x2) # raw representations from victim
-                    loss = -(criterion(p1, z2).mean() + criterion(p2,
-                                                                  z1).mean()) * 0.5
+                    z1 = self.model.encoder(z1).detach()
+                    z2 = self.model.encoder(z2).detach()
+                    # loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
+                    #                                               z1).mean()) * 0.5
+                    # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2
+                    loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
 
                 else:
                     loss = self.criterion(features, query_features)
@@ -259,13 +252,13 @@ class SimCLR(object):
         logging.info("Stealing has finished.")
         # save model checkpoints
         checkpoint_name = f'stolen_checkpoint_{self.args.epochs}_{self.loss}.pth.tar'
-        save_checkpoint({
-            'epoch': self.args.epochs,
-            'arch': self.args.arch,
-            'state_dict': self.model.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-        }, is_best=False,
-            filename=os.path.join(self.log_dir, checkpoint_name))
+        # save_checkpoint({
+        #     'epoch': self.args.epochs,
+        #     'arch': self.args.arch,
+        #     'state_dict': self.model.state_dict(),
+        #     'optimizer': self.optimizer.state_dict(),
+        # }, is_best=False,
+        #     filename=os.path.join(self.log_dir, checkpoint_name))
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
@@ -274,4 +267,4 @@ class SimCLR(object):
         }, is_best=False,
             filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
-            f"Stolen model checkpoint and metadata has been saved at {self.log_dir}.")
+            f"Stolen model checkpoint and metadata has been saved at {self.log_dir2}.")

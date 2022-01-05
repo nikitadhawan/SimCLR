@@ -69,13 +69,13 @@ class RegularDataset:
     def get_simclr_pipeline_transform(size, s=1):
         """Return a set of data augmentation transformations as described in the SimCLR paper."""
         data_transforms = transforms.Compose([transforms.ToTensor()])
-        color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-        data_transforms = transforms.Compose([transforms.RandomResizedCrop(size=size),
-                                              transforms.RandomHorizontalFlip(),
-                                              transforms.RandomApply([color_jitter], p=0.8),
-                                              transforms.RandomGrayscale(p=0.2),
-                                              GaussianBlur(kernel_size=int(0.1 * size)),
-                                              transforms.ToTensor()])
+        # color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+        # data_transforms = transforms.Compose([transforms.RandomResizedCrop(size=size),
+        #                                       transforms.RandomHorizontalFlip(),
+        #                                       transforms.RandomApply([color_jitter], p=0.8),
+        #                                       transforms.RandomGrayscale(p=0.2),
+        #                                       GaussianBlur(kernel_size=int(0.1 * size)),
+        #                                       transforms.ToTensor()])
         return data_transforms
 
     def get_dataset(self, name, n_views):
@@ -98,8 +98,8 @@ class RegularDataset:
             return dataset_fn()
     def get_test_dataset(self, name, n_views):
         valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=False,
-                                                              transform=ContrastiveLearningViewGenerator(  # This transform in its current state only converts it to a tensor. See line 69
-                                                                  self.get_simclr_pipeline_transform(32), # verify if we use the transform here. also need the option for multiple augmentations possibly in the main code
+                                                              transform=ContrastiveLearningViewGenerator(  
+                                                                  self.get_simclr_pipeline_transform(32),
                                                                   n_views),
                                                               download=True),
 

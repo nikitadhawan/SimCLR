@@ -4,7 +4,7 @@ import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
-from models.resnet_simclr import ResNetSimCLR
+from models.resnet_simclr import ResNetSimCLR, SimSiam
 from simclr import SimCLR
 from utils import load_victim
 
@@ -60,16 +60,14 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations. this will be important when using the head.
+parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument('--folder_name', default='resnet18_100-epochs_cifar10',
-                    type=str, help='Pretrained SimCLR model to steal.')
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
-parser.add_argument('--lossvictim', default='supcon', type=str,
+parser.add_argument('--lossvictim', default='infonce', type=str,
                     help='Loss function victim was trained with')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
@@ -97,13 +95,29 @@ def main():
         args.lr = 0.0003
     if args.losstype == "supcon":
         args.lr = 0.05
-    dataset = RegularDataset(args.data)
+    if args.losstype == "symmetrized":
+        args.batch_size = 256
+        args.lr = 0.05
+        args.out_dim = 512
+        args.n_views = 2
+        args.stolenhead = "True"
+    if args.losstype in ["mse", "softce", "wassersein"]:
+        args.n_views = 1
+    if args.n_views == 1:
+        dataset = RegularDataset(args.data)
+    elif args.n_views == 2:
+        dataset = ContrastiveLearningDataset(args.data) # using data augmentation for queries
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
 
     query_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
-    indxs = list(range(0, len(query_dataset) - 1000*args.n_views))
+    if args.n_views == 1:
+        indxs = list(range(0, len(query_dataset) - 1000))
+    elif args.n_views == 2:
+        indxs = list(range(0, int(len(query_dataset)/2) - 1000)) + list(range(int(len(query_dataset)/2), len(query_dataset) - 1000)) # augmentations divide the images into two halves.
+    else:
+        raise NotImplementedError(f"n_views = {args.n_views} not currently supported.")
     query_dataset = torch.utils.data.Subset(query_dataset,
                                            indxs)  # query set (without last 1000 samples in the test set)
 
@@ -128,16 +142,18 @@ def main():
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,args.arch, args.lossvictim,
                                    device=args.device, discard_mlp=False)
     if args.stolenhead == "False":
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim,
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
                              include_mlp=False)
     else:
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim,
+        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
                              include_mlp=True)
+    if args.losstype == "symmetrized":
+        model = SimSiam(models.__dict__[args.arch], args.out_dim, args.out_dim)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
 
-    if args.losstype == "supcon":
+    if args.losstype in ["supcon", "symmetrized"]:
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                     momentum=args.momentum,
                                     weight_decay=args.weight_decay)
