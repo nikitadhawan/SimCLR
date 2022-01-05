@@ -170,7 +170,7 @@ class SimCLR(object):
     def steal(self, train_loader, num_queries):
         # Note: We use the test set to attack the model.
         self.model.train()
-        self.victim_model.eval() 
+        self.victim_model.eval()
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -189,7 +189,8 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 if self.args.defence == "True":
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
-                features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
+                if self.loss != "symmetrized":
+                    features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
                     loss = self.criterion(features,F.softmax(features, dim=1))  #  F.softmax(query_features/self.args.temperature, dim=1))
                 elif self.loss == "infonce":
@@ -222,8 +223,8 @@ class SimCLR(object):
                     p1, p2, _, _ = self.model(x1, x2)
                     z1 = self.victim_model(x1)
                     z2 = self.victim_model(x2) # raw representations from victim
-                    z1 = self.model.encoder(z1).detach()
-                    z2 = self.model.encoder(z2).detach()
+                    z1 = self.model.encoder.fc(z1).detach()
+                    z2 = self.model.encoder.fc(z2).detach()
                     # loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
                     #                                               z1).mean()) * 0.5
                     # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2
