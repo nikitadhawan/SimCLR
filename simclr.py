@@ -28,19 +28,23 @@ class SimCLR(object):
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         self.loss = loss
-        if os.path.exists(os.path.join(self.log_dir2, 'training.log')):
-            os.remove(os.path.join(self.log_dir2, 'training.log'))
-        else:
-            try:
+        logname = 'training.log'
+        if self.stealing:
+            logname = f'training{self.args.datasetsteal}.log'
+        if self.args.clear == "True":
+            if os.path.exists(os.path.join(self.log_dir2, logname)):
+                os.remove(os.path.join(self.log_dir2, logname))
+            else:
                 try:
-                    os.mkdir(f"/checkpoint/{os.getenv('USER')}/SimCLR")
-                    os.mkdir(self.log_dir2)
+                    try:
+                        os.mkdir(f"/checkpoint/{os.getenv('USER')}/SimCLR")
+                        os.mkdir(self.log_dir2)
+                    except:
+                        os.mkdir(self.log_dir2)
                 except:
-                    os.mkdir(self.log_dir2)
-            except:
-                print(f"Error creating directory at {self.log_dir2}")
+                    pass #print(f"Error creating directory at {self.log_dir2}")
         logging.basicConfig(
-            filename=os.path.join(self.log_dir2, 'training.log'),
+            filename=os.path.join(self.log_dir2, logname),
             level=logging.DEBUG)
         if self.stealing:
             self.victim_model = victim_model.to(self.args.device)
@@ -150,13 +154,13 @@ class SimCLR(object):
         logging.info("Training has finished.")
         # save model checkpoints
         checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
-        save_checkpoint({
-            'epoch': self.args.epochs,
-            'arch': self.args.arch,
-            'state_dict': self.model.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-        }, is_best=False,
-            filename=os.path.join(self.log_dir, checkpoint_name))
+        # save_checkpoint({
+        #     'epoch': self.args.epochs,
+        #     'arch': self.args.arch,
+        #     'state_dict': self.model.state_dict(),
+        #     'optimizer': self.optimizer.state_dict(),
+        # }, is_best=False,
+        #     filename=os.path.join(self.log_dir, checkpoint_name))
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
@@ -165,7 +169,7 @@ class SimCLR(object):
         }, is_best=False,
             filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
-            f"Model checkpoint and metadata has been saved at {self.log_dir}")
+            f"Model checkpoint and metadata has been saved at {self.log_dir2}")
 
     def steal(self, train_loader, num_queries):
         # Note: We use the test set to attack the model.
@@ -187,6 +191,8 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
+                if self.args.stolenhead == "True":
+                    query_features = self.model.backbone.fc(query_features).detach() # pass representations through stolen head
                 if self.args.defence == "True":
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                 if self.loss != "symmetrized":
@@ -224,11 +230,11 @@ class SimCLR(object):
                     z1 = self.victim_model(x1)
                     z2 = self.victim_model(x2) # raw representations from victim
                     z1 = self.model.encoder.fc(z1).detach()
-                    z2 = self.model.encoder.fc(z2).detach()
-                    # loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
-                    #                                               z1).mean()) * 0.5
-                    # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2
-                    loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
+                    z2 = self.model.encoder.fc(z2).detach() # pass representations through attacker's encoder. This gives a better performance.
+                    loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
+                                                                  z1).mean()) * 0.5
+                    # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2 # same as above
+                    #loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
 
                 else:
                     loss = self.criterion(features, query_features)

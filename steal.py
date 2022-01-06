@@ -16,7 +16,9 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
+parser.add_argument('-datasetsteal', default='cifar10',
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
                     help='model architecture: ' +
@@ -75,6 +77,8 @@ parser.add_argument('--stolenhead', default='False', type=str,
                     help='Use an additional head while training the stolen model.', choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
                     help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+parser.add_argument('--clear', default='True', type=str,
+                    help='Clear previous logs', choices=['True', 'False'])
 
 
 def main():
@@ -95,6 +99,8 @@ def main():
         args.lr = 0.0003
     if args.losstype == "supcon":
         args.lr = 0.05
+    if args.losstype == "softnn":
+        args.lr = 0.001
     if args.losstype == "symmetrized":
         args.batch_size = 256
         args.lr = 0.05
@@ -111,7 +117,7 @@ def main():
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
 
-    query_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
+    query_dataset = dataset.get_test_dataset(args.datasetsteal, args.n_views)
     if args.n_views == 1:
         indxs = list(range(0, len(query_dataset) - 1000))
     elif args.n_views == 2:

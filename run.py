@@ -55,6 +55,8 @@ parser.add_argument('--n-views', default=2, type=int, metavar='N',
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
+parser.add_argument('--clear', default='True', type=str,
+                    help='Clear previous logs', choices=['True', 'False'])
 
 
 def main():
@@ -71,6 +73,8 @@ def main():
 
     if args.losstype == "supcon":
         args.lr = 0.05
+    if args.losstype == "softnn":
+        args.lr = 0.001
 
     dataset = ContrastiveLearningDataset(args.data)
 

@@ -20,7 +20,9 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
+parser.add_argument('--dataset-test', default='svhn',
+                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=500,
@@ -38,7 +40,9 @@ parser.add_argument('--save', default='False', type=str,
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
 parser.add_argument('--head', default='False', type=str,
-                    help='stolen model was trained using recreated head.')
+                    help='stolen model was trained using recreated head.', choices=['True', 'False'])
+parser.add_argument('--clear', default='True', type=str,
+                    help='Clear previous logs', choices=['True', 'False'])
 
 args = parser.parse_args()
 if args.modeltype == "stolen":
@@ -49,9 +53,10 @@ if args.modeltype == "stolen":
 else:
     args.arch = "resnet34"
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
-logname = f'testing{args.modeltype}.log'
-if os.path.exists(os.path.join(log_dir, logname)):
-    os.remove(os.path.join(log_dir, logname))
+logname = f'testing{args.modeltype}{args.dataset_test}.log'
+if args.clear == "True":
+    if os.path.exists(os.path.join(log_dir, logname)):
+        os.remove(os.path.join(log_dir, logname))
 logging.basicConfig(
     filename=os.path.join(log_dir, logname),
     level=logging.DEBUG)
@@ -92,14 +97,21 @@ def load_stolen(epochs, loss, model, device):
         checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
     state_dict = checkpoint['state_dict']
-
     # Remove head.
-    for k in list(state_dict.keys()):
-        if k.startswith('backbone.'):
-            if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                # remove prefix
-                state_dict[k[len("backbone."):]] = state_dict[k]
-        del state_dict[k]
+    if loss == "symmetrized":
+        for k in list(state_dict.keys()):
+            if k.startswith('encoder.'):
+                if k.startswith('encoder') and not k.startswith('encoder.fc'):
+                    # remove prefix
+                    state_dict[k[len("encoder."):]] = state_dict[k]
+            del state_dict[k]
+    else:
+        for k in list(state_dict.keys()):
+            if k.startswith('backbone.'):
+                if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                    # remove prefix
+                    state_dict[k[len("backbone."):]] = state_dict[k]
+            del state_dict[k]
 
     log = model.load_state_dict(state_dict, strict=False)
     assert log.missing_keys == ['fc.weight', 'fc.bias']
@@ -130,6 +142,20 @@ def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
+def get_svhn_data_loaders(download, shuffle=False, batch_size=256):
+    train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
+                                  transform=transforms.ToTensor())
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                            num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test', download=download,
+                                  transform=transforms.ToTensor())
+    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    test_dataset = torch.utils.data.Subset(test_dataset,
+                                           indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=shuffle)
+    return train_loader, test_loader
+
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -145,17 +171,6 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
-
-
-def soft_cross_entropy(pred, soft_targets, weights=None):
-    if weights is not None:
-        return torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights,
-                      1))
-    else:
-        return torch.mean(
-            torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
-
 
 
 
@@ -176,11 +191,12 @@ else:
                         device=device)
     print("Evaluating stolen model")
 
-if args.dataset == 'cifar10':
+if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=True)
-elif args.dataset == 'stl10':
+elif args.dataset_test == 'stl10':
     train_loader, test_loader = get_stl10_data_loaders(download=True)
-print("Dataset:", args.dataset)
+elif args.dataset_test == "svhn":
+    train_loader, test_loader = get_svhn_data_loaders(download=False)
 
 # freeze all layers but the last fc
 for name, param in model.named_parameters():
@@ -201,7 +217,7 @@ epochs = 100
 
 ## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
 
-
+logging.info(f"Evaluating {args.modeltype} model on {args.dataset_test} dataset. Model trained using {args.losstype}.")
 for epoch in range(epochs):
     top1_train_accuracy = 0
     for counter, (x_batch, y_batch) in enumerate(train_loader):

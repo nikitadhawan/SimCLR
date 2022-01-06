@@ -32,7 +32,16 @@ class ContrastiveLearningDataset:
                                                           transform=ContrastiveLearningViewGenerator(
                                                               self.get_simclr_pipeline_transform(96),
                                                               n_views),
-                                                          download=True)}
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                          split='train',
+                                                          transform=ContrastiveLearningViewGenerator(
+                                                              self.get_simclr_pipeline_transform(
+                                                                  32),
+                                                              n_views),
+                                                          download=True)
+                          }
 
         try:
             dataset_fn = valid_datasets[name]
@@ -51,7 +60,16 @@ class ContrastiveLearningDataset:
                                                           transform=ContrastiveLearningViewGenerator(
                                                               self.get_simclr_pipeline_transform(96),
                                                               n_views),
-                                                          download=True)}
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                        split='test',
+                                                        transform=ContrastiveLearningViewGenerator(
+                                                            self.get_simclr_pipeline_transform(
+                                                                32),
+                                                            n_views),
+                                                        download=True)
+                          }
 
         try:
             dataset_fn = valid_datasets[name]
@@ -88,7 +106,16 @@ class RegularDataset:
                                                           transform=ContrastiveLearningViewGenerator(
                                                               self.get_simclr_pipeline_transform(96),
                                                               n_views),
-                                                          download=True)}
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                        split='train',
+                                                        transform=ContrastiveLearningViewGenerator(
+                                                            self.get_simclr_pipeline_transform(
+                                                                32),
+                                                            n_views),
+                                                        download=True)
+                          }
 
         try:
             dataset_fn = valid_datasets[name]
@@ -107,7 +134,16 @@ class RegularDataset:
                                                           transform=ContrastiveLearningViewGenerator(
                                                               self.get_simclr_pipeline_transform(96),
                                                               n_views),
-                                                          download=True)}
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                        split='test',
+                                                        transform=ContrastiveLearningViewGenerator(
+                                                            self.get_simclr_pipeline_transform(
+                                                                32),
+                                                            n_views),
+                                                        download=True)
+                          }
 
         try:
             dataset_fn = valid_datasets[name]

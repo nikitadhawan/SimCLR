@@ -8,7 +8,7 @@ from exceptions.exceptions import InvalidBackboneError
 
 class ResNetSimCLR(nn.Module):
 
-    def __init__(self, base_model, out_dim, loss, include_mlp = True):
+    def __init__(self, base_model, out_dim, loss=None, include_mlp = True):
         super(ResNetSimCLR, self).__init__()
         self.resnet_dict = {"resnet18": models.resnet18(pretrained=False, num_classes=out_dim),
                             "resnet34": models.resnet34(pretrained=False,
@@ -43,7 +43,7 @@ class ResNetSimCLR(nn.Module):
             return model
 
     def forward(self, x):
-        if self.loss in ["supcon", "softce"]:
+        if self.loss in ["supcon"]:
             return F.normalize(self.backbone(x), dim=1)
         return self.backbone(x)
 
