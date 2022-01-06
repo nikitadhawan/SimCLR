@@ -29,9 +29,10 @@ class ResNetSimCLR(nn.Module):
             else:
                 self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.backbone.fc)
         else:
-            self.backbone.fc = nn.Linear(dim_mlp, dim_mlp, bias=False)
-            self.backbone.fc.weight.data.copy_(torch.eye(dim_mlp))
-            self.backbone.fc.weight.requires_grad = False # last layer does nothing. only there to be compatible with resnet
+            # self.backbone.fc = nn.Linear(dim_mlp, dim_mlp, bias=False)
+            # self.backbone.fc.weight.data.copy_(torch.eye(dim_mlp))
+            # self.backbone.fc.weight.requires_grad = False # last layer does nothing. only there to be compatible with resnet
+            self.backbone.fc = nn.Identity() # no head used
 
     def _get_basemodel(self, model_name):
         try:
