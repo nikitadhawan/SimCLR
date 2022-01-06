@@ -30,7 +30,7 @@ class SimCLR(object):
         self.loss = loss
         logname = 'training.log'
         if self.stealing:
-            logname = f'training{self.args.datasetsteal}.log'
+            logname = f'training{self.args.datasetsteal}{self.args.num_queries}.log'
         if self.args.clear == "True":
             if os.path.exists(os.path.join(self.log_dir2, logname)):
                 os.remove(os.path.join(self.log_dir2, logname))
@@ -191,8 +191,8 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                if self.args.stolenhead == "True":
-                    query_features = self.model.backbone.fc(query_features).detach() # pass representations through stolen head
+                # if self.args.stolenhead == "True":
+                #     query_features = self.model.backbone.fc(query_features).detach() # pass representations through stolen head
                 if self.args.defence == "True":
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                 if self.loss != "symmetrized":

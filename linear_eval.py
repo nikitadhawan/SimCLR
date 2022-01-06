@@ -31,6 +31,8 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
+parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
+                    help='Number of queries to steal the model.')
 parser.add_argument('--lr', default=1e-4, type=float,
                     help='learning rate to train the model with.')
 parser.add_argument('--modeltype', default='stolen', type=str,
@@ -53,7 +55,7 @@ if args.modeltype == "stolen":
 else:
     args.arch = "resnet34"
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
-logname = f'testing{args.modeltype}{args.dataset_test}.log'
+logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
 if args.clear == "True":
     if os.path.exists(os.path.join(log_dir, logname)):
         os.remove(os.path.join(log_dir, logname))

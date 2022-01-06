@@ -17,7 +17,7 @@ parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('-datasetsteal', default='cifar10',
+parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
@@ -116,17 +116,15 @@ def main():
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-
-    query_dataset = dataset.get_test_dataset(args.datasetsteal, args.n_views)
-    if args.n_views == 1:
-        indxs = list(range(0, len(query_dataset) - 1000))
-    elif args.n_views == 2:
-        indxs = list(range(0, int(len(query_dataset)/2) - 1000)) + list(range(int(len(query_dataset)/2), len(query_dataset) - 1000)) # augmentations divide the images into two halves.
-    else:
-        raise NotImplementedError(f"n_views = {args.n_views} not currently supported.")
+    # if args.datasetsteal != args.dataset:
+    #     query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
+    # else:
+    #     query_dataset = dataset.get_test_dataset(args.datasetsteal,
+    #                                              args.n_views)
+    query_dataset = dataset.get_dataset(args.datasetsteal,
+                                             args.n_views)
     query_dataset = torch.utils.data.Subset(query_dataset,
-                                           indxs)  # query set (without last 1000 samples in the test set)
-
+                                           indxs)  # query set (without last 1000 samples as they are used in the test set)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
