@@ -116,15 +116,13 @@ def main():
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    # if args.datasetsteal != args.dataset:
-    #     query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
-    # else:
-    #     indxs = list(range(0, len(query_dataset) - 1000))
-    #     query_dataset = dataset.get_test_dataset(args.datasetsteal,
-    #                                              args.n_views)
-    query_dataset = dataset.get_dataset(args.datasetsteal,
-                                             args.n_views)
-    indxs = list(range(0, len(query_dataset)))
+    if args.datasetsteal != args.dataset:
+        query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
+        indxs = list(range(0, len(query_dataset)))
+    else:
+        query_dataset = dataset.get_test_dataset(args.datasetsteal,
+                                                 args.n_views)
+        indxs = list(range(0, len(query_dataset) - 1000))
     query_dataset = torch.utils.data.Subset(query_dataset,
                                            indxs)  # query set (without last 1000 samples as they are used in the test set)
     train_loader = torch.utils.data.DataLoader(
@@ -132,7 +130,7 @@ def main():
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     query_loader = torch.utils.data.DataLoader(
-        query_dataset, batch_size=args.batch_size, shuffle=True,
+        query_dataset, batch_size=args.batch_size, shuffle=True, # maybe use False
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     if args.victimhead == "False":

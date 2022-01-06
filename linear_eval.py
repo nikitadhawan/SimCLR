@@ -23,6 +23,8 @@ parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--dataset-test', default='svhn',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
+parser.add_argument('--datasetsteal', default='cifar10',
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=500,
@@ -33,7 +35,7 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--lr', default=1e-4, type=float,
+parser.add_argument('--lr', default=1e-4, type=float, # maybe try other lrs
                     help='learning rate to train the model with.')
 parser.add_argument('--modeltype', default='stolen', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
@@ -86,13 +88,13 @@ def load_victim(epochs, dataset, model, loss, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
-def load_stolen(epochs, loss, model, device):
+def load_stolen(epochs, loss, model, dataset, queries, device):
 
     print("Loading stolen model: ")
 
     if args.head == "False":
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar", map_location=device)
         # checkpoint = torch.load(
         # f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
     else:
@@ -189,7 +191,7 @@ if args.modeltype == "victim":
                                          device=device)
     print("Evaluating victim")
 else:
-    model = load_stolen(args.epochs, args.losstype, model,
+    model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal, args.num_queries,
                         device=device)
     print("Evaluating stolen model")
 
