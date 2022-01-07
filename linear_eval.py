@@ -21,7 +21,7 @@ parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('--dataset-test', default='svhn',
+parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
@@ -129,7 +129,7 @@ def get_stl10_data_loaders(download, shuffle=False, batch_size=256):
     test_dataset = datasets.STL10('/ssd003/home/akaleem/data/', split='test', download=download,
                                   transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
-                            num_workers=10, drop_last=False, shuffle=shuffle)
+                            num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
 def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
@@ -222,6 +222,7 @@ epochs = 100
 ## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
 
 logging.info(f"Evaluating {args.modeltype} model on {args.dataset_test} dataset. Model trained using {args.losstype}.")
+logging.info(f"Args: {args}")
 for epoch in range(epochs):
     top1_train_accuracy = 0
     for counter, (x_batch, y_batch) in enumerate(train_loader):

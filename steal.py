@@ -69,7 +69,7 @@ parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
-parser.add_argument('--lossvictim', default='infonce', type=str,
+parser.add_argument('--lossvictim', default='softnn', type=str,
                     help='Loss function victim was trained with')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
@@ -91,7 +91,7 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
-    if args.losstype in  ["infonce", "softnn", "supcon"]:
+    if args.losstype in  ["infonce", "softnn", "supcon", "barlow"]:
         args.batch_size = 256
         args.weight_decay = 1e-4
         args.n_views = 2
@@ -109,12 +109,16 @@ def main():
         args.stolenhead = "True"
     if args.losstype in ["mse", "softce", "wassersein"]:
         args.n_views = 1
+    if args.stolenhead == "True" and args.victimhead == "False":
+        args.out_dim = 512 # since representations are 512 dimensional
     if args.n_views == 1:
         dataset = RegularDataset(args.data)
     elif args.n_views == 2:
         dataset = ContrastiveLearningDataset(args.data) # using data augmentation for queries
 
-    train_dataset = dataset.get_dataset(args.dataset, args.n_views)
+    print("args", args)
+
+    #train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
     if args.datasetsteal != args.dataset:
         query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
@@ -123,11 +127,12 @@ def main():
         query_dataset = dataset.get_test_dataset(args.datasetsteal,
                                                  args.n_views)
         indxs = list(range(0, len(query_dataset) - 1000))
+
     query_dataset = torch.utils.data.Subset(query_dataset,
                                            indxs)  # query set (without last 1000 samples as they are used in the test set)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+    # train_loader = torch.utils.data.DataLoader(
+    #     train_dataset, batch_size=args.batch_size, shuffle=False,
+    #     num_workers=args.workers, pin_memory=True, drop_last=True)
 
     query_loader = torch.utils.data.DataLoader(
         query_dataset, batch_size=args.batch_size, shuffle=True, # maybe use False
@@ -163,7 +168,7 @@ def main():
                                     weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
-        train_loader), eta_min=0,last_epoch=-1)
+        query_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
         simclr = SimCLR(stealing=True, victim_model=victim_model,

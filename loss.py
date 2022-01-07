@@ -291,3 +291,62 @@ def regression_loss(p, z):
     p = F.normalize(p, dim=1)
     z = F.normalize(z, dim=1)
     return 2 - 2 * (p * z).sum(dim=-1)
+
+
+# Barlow Twins https://arxiv.org/pdf/2103.03230.pdf
+
+def off_diagonal(x):
+    # return a flattened view of the off-diagonal elements of a square matrix
+    n, m = x.shape
+    assert n == m
+    return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+
+class BarlowTwins(nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+        self.backbone = torchvision.models.resnet18(zero_init_residual=True)
+        self.backbone.fc = nn.Identity()
+
+        # projector
+        sizes = [512] + [512] # list(map(int, args.projector.split('-')))
+        layers = []
+        for i in range(len(sizes) - 2):
+            layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=False))
+            layers.append(nn.BatchNorm1d(sizes[i + 1]))
+            layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.Linear(sizes[-2], sizes[-1], bias=False))
+        self.projector = nn.Sequential(*layers)
+
+        # normalization layer for the representations z1 and z2
+        self.bn = nn.BatchNorm1d(sizes[-1], affine=False)
+
+    def forward(self, y1, y2):
+        z1 = self.projector(self.backbone(y1))
+        z2 = self.projector(self.backbone(y2))
+
+        # empirical cross-correlation matrix
+        c = self.bn(z1).T @ self.bn(z2)
+
+        # sum the cross-correlation matrix between all gpus
+        c.div_(self.args.batch_size)
+        torch.distributed.all_reduce(c)
+
+        on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
+        off_diag = off_diagonal(c).pow_(2).sum()
+        loss = on_diag + 0.0051 * off_diag
+        return loss
+
+def barlow_loss(z1, z2, device):
+    # z1, z2 are projections of two augmentations
+    bn = nn.BatchNorm1d(512, affine=False).to(device)
+    # empirical cross-correlation matrix
+    c = bn(z1).T @ bn(z2)
+    batch_size = z1.shape[0]
+    # sum the cross-correlation matrix between all gpus
+    c.div_(batch_size)
+
+    on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
+    off_diag = off_diagonal(c).pow_(2).sum()
+    loss = on_diag + 0.0051 * off_diag
+    return loss

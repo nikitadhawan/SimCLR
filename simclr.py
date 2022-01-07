@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss
+from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss
 
 torch.manual_seed(0)
 
@@ -25,7 +25,6 @@ class SimCLR(object):
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
         else:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
-        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         self.stealing = stealing
         self.loss = loss
         logname = 'training.log'
@@ -48,12 +47,14 @@ class SimCLR(object):
             level=logging.DEBUG)
         if self.stealing:
             self.victim_model = victim_model.to(self.args.device)
-        if self.loss == "softce":
+        if self.loss == "infonce":
+            self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+        elif self.loss == "softce":
             self.criterion = soft_cross_entropy
         elif self.loss == "wasserstein":
             self.criterion = wasserstein_loss()
         elif self.loss == "mse":
-            self.criterion = nn.MSELoss()
+            self.criterion = nn.MSELoss().to(self.args.device)
         elif self.loss == "bce":
             self.criterion = nn.BCEWithLogitsLoss()
         elif self.loss == "softnn":
@@ -63,7 +64,9 @@ class SimCLR(object):
             self.criterion = SupConLoss(temperature=self.args.temperature)
         elif self.loss == "symmetrized":
             self.criterion = nn.CosineSimilarity(dim=1)
-        elif self.loss != "infonce":
+        elif self.loss == "barlow": # method from barlow twins
+            self.criterion = barlow_loss
+        else:
             raise RuntimeError(f"Loss function {self.loss} not supported.")
 
 
@@ -81,12 +84,11 @@ class SimCLR(object):
         #     self.args.n_views * self.args.batch_size, self.args.n_views * self.args.batch_size)
         # assert similarity_matrix.shape == labels.shape
 
-        if not self.stealing:
-            # discard the main diagonal from both: labels and similarities matrix
-            mask = torch.eye(labels.shape[0], dtype=torch.bool).to(self.args.device)
-            labels = labels[~mask].view(labels.shape[0], -1)
-            similarity_matrix = similarity_matrix[~mask].view(
-                similarity_matrix.shape[0], -1)
+        # discard the main diagonal from both: labels and similarities matrix
+        mask = torch.eye(labels.shape[0], dtype=torch.bool).to(self.args.device)
+        labels = labels[~mask].view(labels.shape[0], -1)
+        similarity_matrix = similarity_matrix[~mask].view(
+            similarity_matrix.shape[0], -1)
         # assert similarity_matrix.shape == labels.shape
         # select and combine multiple positives
         positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
@@ -98,8 +100,6 @@ class SimCLR(object):
         labels = torch.zeros(logits.shape[0], dtype=torch.long).to(
             self.args.device)
         logits = logits / self.args.temperature
-        # print("labels", torch.sum(labels))
-        # print("logits",logits)
         return logits, labels
 
     def train(self, train_loader):
@@ -184,6 +184,7 @@ class SimCLR(object):
         logging.info(f"Start SimCLR stealing for {self.args.epochs} epochs.")
         logging.info(f"Using loss type: {self.loss}")
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
+        logging.info(f"Args: {self.args}")
 
         for epoch_counter in range(self.args.epochs):
             total_queries = 0
@@ -192,7 +193,7 @@ class SimCLR(object):
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
                 # if self.args.stolenhead == "True":
-                #     query_features = self.model.backbone.fc(query_features).detach() # pass representations through stolen head
+                #     query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
                 if self.args.defence == "True":
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                 if self.loss != "symmetrized":
@@ -227,15 +228,24 @@ class SimCLR(object):
                     # p1 =  self.model(x1)
                     # p2 = self.model(x2) # output from stolen model for each augmentation (including head)
                     p1, p2, _, _ = self.model(x1, x2)
-                    z1 = self.victim_model(x1)
-                    z2 = self.victim_model(x2) # raw representations from victim
-                    z1 = self.model.encoder.fc(z1).detach()
-                    z2 = self.model.encoder.fc(z2).detach() # pass representations through attacker's encoder. This gives a better performance.
+                    y1 = self.victim_model(x1).detach()
+                    y2 = self.victim_model(x2).detach() # raw representations from victim
+                    z1 = self.model.encoder.fc(y1)
+                    z2 = self.model.encoder.fc(y2) # pass representations through attacker's encoder. This gives a better performance.
                     loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
                                                                   z1).mean()) * 0.5
                     # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2 # same as above
                     #loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
-
+                elif self.loss == "barlow":
+                    x1 = images[:int(len(images) / 2)]
+                    x2 = images[int(len(images) / 2):]
+                    p1 = self.model(x1)
+                    p2 = self.model(x2)
+                    y1 = self.victim_model(x1).detach()
+                    y2 = self.victim_model(x2).detach()
+                    P1 = torch.cat([p1, y1], dim=0) # combine all representations on the first view
+                    P2 = torch.cat([p2, y2], dim=0) # combine all representations on the second view
+                    loss = self.criterion(P1, P2, self.args.device)
                 else:
                     loss = self.criterion(features, query_features)
                 self.optimizer.zero_grad()
