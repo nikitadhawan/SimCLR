@@ -69,7 +69,7 @@ parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
-parser.add_argument('--lossvictim', default='softnn', type=str,
+parser.add_argument('--lossvictim', default='infonce', type=str,
                     help='Loss function victim was trained with')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
@@ -120,7 +120,7 @@ def main():
 
     #train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    if args.datasetsteal != args.dataset:
+    if args.datasetsteal != args.dataset or args.datasetsteal == "cifar10": # temporary addition
         query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
         indxs = list(range(0, len(query_dataset)))
     else:
@@ -135,7 +135,7 @@ def main():
     #     num_workers=args.workers, pin_memory=True, drop_last=True)
 
     query_loader = torch.utils.data.DataLoader(
-        query_dataset, batch_size=args.batch_size, shuffle=True, # maybe use False
+        query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     if args.victimhead == "False":

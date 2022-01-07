@@ -192,7 +192,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        if self.num_classes > 0:
+        if self.num_classes > 0: # if num_classes = 0, there is no head.
             x = self.fc(x)
         if self.num_classes==10:
             x = self.fc2(x)

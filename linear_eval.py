@@ -27,8 +27,8 @@ parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
-parser.add_argument('-n', '--num-labeled', default=500,
-                     help='Number of labeled batches to train on')  # Right now this is equivalent to the full training set because of the batch size being 512
+parser.add_argument('-n', '--num-labeled', default=50000,type=int,
+                     help='Number of labeled examples to train on')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -47,6 +47,11 @@ parser.add_argument('--head', default='False', type=str,
                     help='stolen model was trained using recreated head.', choices=['True', 'False'])
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
+parser.add_argument('-b', '--batch-size', default=256, type=int,
+                    metavar='N',
+                    help='mini-batch size (default: 256), this is the total '
+                         'batch size of all GPUs on the current node when '
+                         'using Data Parallel or Distributed Data Parallel')
 
 args = parser.parse_args()
 if args.modeltype == "stolen":
@@ -121,18 +126,18 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
-def get_stl10_data_loaders(download, shuffle=False, batch_size=256):
-    train_dataset = datasets.STL10('/ssd003/home/akaleem/data/', split='train', download=download,
+def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10('/ssd003/home/akaleem/data/', split='test', download=download,
+    test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
                                   transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
+def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
@@ -146,7 +151,7 @@ def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_svhn_data_loaders(download, shuffle=False, batch_size=256):
+def get_svhn_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
@@ -237,8 +242,7 @@ for epoch in range(epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        if counter+1 == args.num_labeled:
+        if (counter+1) * x_batch.shape[0] >= args.num_labeled:
             break
 
     top1_train_accuracy /= (counter + 1)
