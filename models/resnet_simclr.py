@@ -44,10 +44,55 @@ class ResNetSimCLR(nn.Module):
             return model
 
     def forward(self, x):
-        if self.loss == "supcon":
-            return F.normalize(self.backbone(x), dim=1)
+        # if self.loss == "supcon":
+        #     return F.normalize(self.backbone(x), dim=1)
         return self.backbone(x)
 
+
+class ResNetSimCLRV2(nn.Module):
+
+    def __init__(self, base_model, out_dim, loss=None, include_mlp=False):
+        super(ResNetSimCLRV2, self).__init__()
+        self.resnet_dict = {"resnet18": models.resnet18(pretrained=False, num_classes=out_dim),
+                            "resnet34":  models.resnet34(pretrained=False, num_classes=out_dim),
+                            "resnet50": models.resnet50(pretrained=False, num_classes=out_dim)}
+
+        self.backbone = self._get_basemodel(base_model)
+        self.include_mlp = include_mlp
+        self.loss = loss
+        dim_mlp = self.backbone.fc.in_features
+        if self.loss == "symmetrized":
+            self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
+                                             nn.BatchNorm1d(dim_mlp),
+                                             nn.ReLU(inplace=True),
+                                             self.backbone.fc)
+        else:
+            self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
+                                             nn.ReLU(), self.backbone.fc)
+
+    def _get_basemodel(self, model_name):
+        try:
+            model = self.resnet_dict[model_name]
+        except KeyError:
+            raise InvalidBackboneError(
+                "Invalid backbone architecture. Check the config file and pass one of: resnet18 or resnet50")
+        else:
+            return model
+
+    def forward(self, x):
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+        x = self.backbone.avgpool(x)
+        x = torch.flatten(x, 1)
+        if self.include_mlp:
+            x = self.backbone.fc(x)
+        return x
 
 class HeadSimCLR(nn.Module):
     """ Takes a representation as input and passes it through the head to get g(z)"""

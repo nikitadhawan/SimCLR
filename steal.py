@@ -4,7 +4,7 @@ import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
-from models.resnet_simclr import ResNetSimCLR, SimSiam
+from models.resnet_simclr import ResNetSimCLR, ResNetSimCLRV2, SimSiam
 from simclr import SimCLR
 from utils import load_victim
 
@@ -138,24 +138,42 @@ def main():
         query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
+    # if args.victimhead == "False":
+    #     victim_model = ResNetSimCLR(base_model=args.arch,
+    #                                 out_dim=args.out_dim, loss=args.lossvictim, include_mlp=False).to(
+    #         args.device)
+    #     victim_model = load_victim(args.epochstrain, args.dataset, victim_model, args.arch, args.lossvictim,
+    #                                          device=args.device, discard_mlp=True)
+    # else:
+    #     victim_model = ResNetSimCLR(base_model=args.arch,
+    #                                 out_dim=args.out_dim, loss=args.lossvictim, include_mlp=True).to(
+    #         args.device)
+    #     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,args.arch, args.lossvictim,
+    #                                device=args.device, discard_mlp=False)
+    # if args.stolenhead == "False":
+    #     model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
+    #                          include_mlp=False)
+    # else:
+    #     model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
+    #                          include_mlp=True)
     if args.victimhead == "False":
-        victim_model = ResNetSimCLR(base_model=args.arch,
-                                    out_dim=args.out_dim, loss=args.lossvictim, include_mlp=False).to(
-            args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model, args.arch, args.lossvictim,
-                                             device=args.device, discard_mlp=True)
+        victim_model = ResNetSimCLRV2(base_model=args.arch,
+                                      out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                   args.arch, args.lossvictim,
+                                   device=args.device)
     else:
-        victim_model = ResNetSimCLR(base_model=args.arch,
-                                    out_dim=args.out_dim, loss=args.lossvictim, include_mlp=True).to(
-            args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,args.arch, args.lossvictim,
-                                   device=args.device, discard_mlp=False)
+        victim_model = ResNetSimCLRV2(base_model=args.arch,
+                                      out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
+        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                   args.arch, args.lossvictim,
+                                   device=args.device)
     if args.stolenhead == "False":
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
-                             include_mlp=False)
+        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False)
     else:
-        model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
-                             include_mlp=True)
+        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim,
+                               include_mlp=True)
+
     if args.losstype == "symmetrized":
         model = SimSiam(models.__dict__[args.arch], args.out_dim, args.out_dim)
 
