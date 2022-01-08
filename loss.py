@@ -282,7 +282,7 @@ class SupConLoss(nn.Module):
         return loss
 
 def neg_cosine(p, z): # negative cosine similarity
-    z = z.detach() # stop gradient
+    #z = z.detach() # stop gradient
     p = F.normalize(p, dim=1) # l2-normalize
     z = F.normalize(z, dim=1) # l2-normalize
     return -(p*z).sum(dim=1).mean()

@@ -120,7 +120,7 @@ def main():
 
     #train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    if args.datasetsteal != args.dataset or args.datasetsteal == "cifar10": # temporary addition
+    if args.datasetsteal != args.dataset:
         query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
         indxs = list(range(0, len(query_dataset)))
     else:
