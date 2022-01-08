@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import torchvision
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLR
 from models.resnet_wider import resnet50rep, resnet50x1
 import torchvision.transforms as transforms
 import logging
@@ -84,17 +83,16 @@ class ResNet50(nn.Module):
 
 #victim_model = resnet50x1().to(device)
 victim_model = resnet50rep().to(device)
-print("victi", victim_model)
 
 checkpoint = torch.load(
         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
 state_dict = checkpoint['state_dict']
 new_state_dict = state_dict.copy()
-for k in state_dict.keys():
-    if k.startswith('fc.'):
-        del new_state_dict[k]
+# for k in state_dict.keys():
+#     if k.startswith('fc.'):
+#         del new_state_dict[k]
 
-victim_model.load_state_dict(new_state_dict)
+victim_model.load_state_dict(new_state_dict, strict=False)
 
 if args.dataset == "imagenet":
     victim_model = ResNet50(pretrained=victim_model, num_classes=1000).to(device)

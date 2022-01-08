@@ -4,7 +4,7 @@ import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
-from models.resnet_simclr import ResNetSimCLR, ResNetSimCLRV2, SimSiam
+from models.resnet_simclr import ResNetSimCLRV2, SimSiam
 from simclr import SimCLR
 from utils import load_victim
 
@@ -161,7 +161,7 @@ def main():
                                       out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                    args.arch, args.lossvictim,
-                                   device=args.device)
+                                   device=args.device, discard_mlp = True)
     else:
         victim_model = ResNetSimCLRV2(base_model=args.arch,
                                       out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
