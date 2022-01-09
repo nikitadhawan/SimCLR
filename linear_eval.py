@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--datasetsteal', default='cifar10',
@@ -52,44 +52,31 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-
 args = parser.parse_args()
-if args.modeltype == "stolen":
-    if args.head == "False":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
-    else:
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"  
-else:
-    args.arch = "resnet34"
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
-logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
-if args.clear == "True":
-    if os.path.exists(os.path.join(log_dir, logname)):
-        os.remove(os.path.join(log_dir, logname))
-logging.basicConfig(
-    filename=os.path.join(log_dir, logname),
-    level=logging.DEBUG)
 
 
 def load_victim(epochs, dataset, model, loss, device):
 
     print("Loading victim model: ")
+    if dataset == "imagenet":
+        model = torchvision.models.resnet50(pretrained=True).to(device)
+        model.fc = torch.nn.Linear(2048, 10).to(device)
+        return model
     checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
         map_location=device)
-    # checkpoint = torch.load(
-    #     f'/ssd003/home/akaleem/SimCLR/runs/{dataset}_checkpoint_{epochs}.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
-
+    new_state_dict = {}
     # Remove head.
     for k in list(state_dict.keys()):
         if k.startswith('backbone.'):
             if k.startswith('backbone') and not k.startswith('backbone.fc'):
                 # remove prefix
-                state_dict[k[len("backbone."):]] = state_dict[k]
-        del state_dict[k] # delete the head (i.e. layers that do not include backbone)
+                new_state_dict[k[len("backbone."):]] = state_dict[k]
+        else:
+            new_state_dict[k] = state_dict[k]
 
-    log = model.load_state_dict(state_dict, strict=False)
+    log = model.load_state_dict(new_state_dict, strict=False)
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
@@ -100,29 +87,30 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     if args.head == "False":
         checkpoint = torch.load(
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar", map_location=device)
-        # checkpoint = torch.load(
-        # f'/ssd003/home/akaleem/SimCLR/runs/test/stolen_checkpoint_{epochs}_{loss}.pth.tar', map_location=device)
     else:
         checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
     state_dict = checkpoint['state_dict']
+    new_state_dict = {}
     # Remove head.
     if loss == "symmetrized":
         for k in list(state_dict.keys()):
             if k.startswith('encoder.'):
                 if k.startswith('encoder') and not k.startswith('encoder.fc'):
                     # remove prefix
-                    state_dict[k[len("encoder."):]] = state_dict[k]
-            del state_dict[k]
+                    new_state_dict[k[len("encoder."):]] = state_dict[k]
+            else:
+                new_state_dict[k] = state_dict[k]
     else:
         for k in list(state_dict.keys()):
             if k.startswith('backbone.'):
                 if k.startswith('backbone') and not k.startswith('backbone.fc'):
                     # remove prefix
-                    state_dict[k[len("backbone."):]] = state_dict[k]
-            del state_dict[k]
+                    new_state_dict[k[len("backbone."):]] = state_dict[k]
+            else:
+                new_state_dict[k] = state_dict[k]
 
-    log = model.load_state_dict(state_dict, strict=False)
+    log = model.load_state_dict(new_state_dict, strict=False)
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
@@ -183,6 +171,27 @@ def accuracy(output, target, topk=(1,)):
 
 
 
+
+
+if args.modeltype == "stolen":
+    if args.head == "False":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+    else:
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
+else:
+    if args.dataset == "imagenet":
+        args.arch = "resnet50"
+    else:
+        args.arch = "resnet34"
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
+logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+if args.clear == "True":
+    if os.path.exists(os.path.join(log_dir, logname)):
+        os.remove(os.path.join(log_dir, logname))
+logging.basicConfig(
+    filename=os.path.join(log_dir, logname),
+    level=logging.DEBUG)
+
 if args.arch == 'resnet18':
     model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
 elif args.arch == 'resnet34':
@@ -201,9 +210,9 @@ else:
     print("Evaluating stolen model")
 
 if args.dataset_test == 'cifar10':
-    train_loader, test_loader = get_cifar10_data_loaders(download=True)
+    train_loader, test_loader = get_cifar10_data_loaders(download=False)
 elif args.dataset_test == 'stl10':
-    train_loader, test_loader = get_stl10_data_loaders(download=True)
+    train_loader, test_loader = get_stl10_data_loaders(download=False)
 elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 

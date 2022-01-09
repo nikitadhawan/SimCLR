@@ -192,7 +192,7 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                # if self.args.stolenhead == "True":
+                # if self.args.dataset == "imagenet" and self.args.stolenhead == "True":
                 #     query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
                 if self.args.defence == "True":
                     query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings

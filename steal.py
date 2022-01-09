@@ -15,7 +15,7 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
-parser.add_argument('-dataset', default='cifar10',
+parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
@@ -24,11 +24,11 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     help='model architecture: ' +
                          ' | '.join(model_names) +
                          ' (default: resnet50)')
-parser.add_argument('--archstolen', default='resnet18',
+parser.add_argument('--archstolen', default='resnet34',
                     choices=model_names,
                     help='stolen model architecture: ' +
                          ' | '.join(model_names) +
-                         ' (default: resnet18)')
+                         ' (default: resnet34)')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
@@ -117,6 +117,8 @@ def main():
         dataset = ContrastiveLearningDataset(args.data) # using data augmentation for queries
     if args.dataset == "imagenet":
         args.arch = "resnet50"
+        args.archstolen = "resnet50"
+        args.out_dim = 512
 
     print("args", args)
 
@@ -160,7 +162,7 @@ def main():
     #                          include_mlp=True)
     if args.dataset == "imagenet":
         victim_model = models.resnet50(pretrained=True)
-        victim_model.fc = nn.Identity()
+        victim_model.fc = torch.nn.Identity()
         # 2048 dimensional output
     else:
         if args.victimhead == "False":
@@ -176,9 +178,9 @@ def main():
                                        args.arch, args.lossvictim,
                                        device=args.device)
     if args.stolenhead == "False":
-        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False)
+        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
     else:
-        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim,
+        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim,loss=args.lossvictim,
                                include_mlp=True)
 
     if args.losstype == "symmetrized":
