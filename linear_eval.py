@@ -19,7 +19,7 @@ print("Using device:", device)
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
-parser.add_argument('-dataset', default='cifar10',
+parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])

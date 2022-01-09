@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
@@ -115,6 +115,8 @@ def main():
         dataset = RegularDataset(args.data)
     elif args.n_views == 2:
         dataset = ContrastiveLearningDataset(args.data) # using data augmentation for queries
+    if args.dataset == "imagenet":
+        args.arch = "resnet50"
 
     print("args", args)
 
@@ -156,18 +158,23 @@ def main():
     # else:
     #     model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
     #                          include_mlp=True)
-    if args.victimhead == "False":
-        victim_model = ResNetSimCLRV2(base_model=args.arch,
-                                      out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
-                                   args.arch, args.lossvictim,
-                                   device=args.device, discard_mlp = True)
+    if args.dataset == "imagenet":
+        victim_model = models.resnet50(pretrained=True)
+        victim_model.fc = nn.Identity()
+        # 2048 dimensional output
     else:
-        victim_model = ResNetSimCLRV2(base_model=args.arch,
-                                      out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
-        victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
-                                   args.arch, args.lossvictim,
-                                   device=args.device)
+        if args.victimhead == "False":
+            victim_model = ResNetSimCLRV2(base_model=args.arch,
+                                          out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
+            victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                       args.arch, args.lossvictim,
+                                       device=args.device, discard_mlp = True)
+        else:
+            victim_model = ResNetSimCLRV2(base_model=args.arch,
+                                          out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
+            victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
+                                       args.arch, args.lossvictim,
+                                       device=args.device)
     if args.stolenhead == "False":
         model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False)
     else:

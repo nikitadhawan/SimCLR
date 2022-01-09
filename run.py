@@ -14,7 +14,7 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
-parser.add_argument('-dataset', default='cifar10',
+parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,

@@ -194,8 +194,6 @@ class ResNet(nn.Module):
         x = torch.flatten(x, 1)
         if self.num_classes > 0: # if num_classes = 0, there is no head.
             x = self.fc(x)
-        if self.num_classes==10:
-            x = self.fc2(x)
 
         return x
 
@@ -208,6 +206,9 @@ def resnet50x1():
 
 def resnet50rep():
     return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=0, width_mult=1)
+
+def resnet50rep2():
+    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=10, width_mult=1)
 
 def resnet50x2():
     return ResNet(Bottleneck, [3, 4, 6, 3], width_mult=2)

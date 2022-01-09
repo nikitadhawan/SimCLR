@@ -11,8 +11,10 @@ import matplotlib.pyplot as plt
 import torchvision
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_wider import resnet50rep, resnet50x1
+from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
+from models.resnet_simclr import SimSiam
 import torchvision.transforms as transforms
+from torchvision import models
 import logging
 from torchvision import datasets
 import random
@@ -70,34 +72,65 @@ parser.add_argument('--losstype', default='infonce', type=str,
 args = parser.parse_args()
 
 
-class ResNet50(nn.Module):
-    def __init__(self, pretrained, num_classes=10):
-        super(ResNet50, self).__init__()
-        self.pretrained = pretrained
-        self.fc = nn.Sequential(nn.Linear(512 * 4* 1, num_classes))
+# class ResNet50(nn.Module):
+#     def __init__(self, pretrained, num_classes=10):
+#         super(ResNet50, self).__init__()
+#         self.pretrained = pretrained
+#         self.fc = nn.Sequential(nn.Linear(512 * 4 * 1, 512*4), nn.ReLU(), nn.Linear(512 * 4* 1, num_classes))
+#
+#     def forward(self, x):
+#         x = self.pretrained(x)
+#         x = self.fc(x)
+#         return x
+#
+# class ResNet50v2(nn.Module):
+#     def __init__(self, pretrained, num_classes=10):
+#         super(ResNet50v2, self).__init__()
+#         self.pretrained = pretrained
+#
+#     def forward(self, x):
+#         x = self.pretrained(x)
+#         return x
+#
+# class ResNet50v3(nn.Module):
+#     # with SimSiam
+#     def __init__(self, pretrained, num_classes=10):
+#         super(ResNet50v3, self).__init__()
+#         self.pretrained = pretrained
+#         self.num_classes = num_classes
+#         self.fc = nn.Sequential(nn.Linear(512 * 4 * 1, num_classes))
+#
+#     def forward(self, x):
+#         x = self.pretrained.encoder(x)
+#         x = self.fc(x)
+#         return x
 
-    def forward(self, x):
-        x = self.pretrained(x)
-        x = self.fc(x)
-        return x
 
 #victim_model = resnet50x1().to(device)
-victim_model = resnet50rep().to(device)
+# victim_model = resnet50rep().to(device)
+#victim_model = resnet50rep2().to(device)
+# victim_model = SimSiam(models.__dict__["resnet50"], args.out_dim, args.out_dim).to(device)
+# victim_model.encoder.fc = nn.Identity()
+# checkpoint = torch.load(
+#         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+# checkpoint = torch.load(
+#         f'/ssd003/home/akaleem/SimCLR/models/resnet50SimSiam.pth.tar', map_location=device)
+# state_dict = checkpoint['state_dict']
+# print("state dict", state_dict.keys())
+# new_state_dict = state_dict.copy()
+# # for k in state_dict.keys():
+# #     if k.startswith('fc.'):
+# #         del new_state_dict[k]
+#
+# victim_model.load_state_dict(new_state_dict, strict=False)
 
-checkpoint = torch.load(
-        f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
-state_dict = checkpoint['state_dict']
-new_state_dict = state_dict.copy()
-# for k in state_dict.keys():
-#     if k.startswith('fc.'):
-#         del new_state_dict[k]
-
-victim_model.load_state_dict(new_state_dict, strict=False)
-
-if args.dataset == "imagenet":
-    victim_model = ResNet50(pretrained=victim_model, num_classes=1000).to(device)
-else:
-    victim_model = ResNet50(pretrained=victim_model).to(device)
+# if args.dataset == "imagenet":
+#     victim_model = ResNet50(pretrained=victim_model, num_classes=1000).to(device)
+# else:
+#     victim_model = ResNet50v2(pretrained=victim_model).to(device)
+#victim_model = ResNet50v3(pretrained=victim_model).to(device)
+victim_model = models.resnet50(pretrained=True).to(device) # pretrained torch model on imagenet
+victim_model.fc = nn.Sequential(nn.Linear(2048, 10)).to(device)
 print("Loaded victim")
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=64):
@@ -113,11 +146,22 @@ def get_stl10_data_loaders(download, shuffle=False, batch_size=64):
 
 def get_cifar10_data_loaders(download, shuffle=False, batch_size=64):
     train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
-                                  transform=transforms.ToTensor())
+                                  transform=transforms.ToTensor())#transforms.Compose([
+    #     transforms.RandomResizedCrop(32),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize([0.49139969, 0.48215842, 0.44653093], [0.24703223, 0.24348513, 0.26158784])
+    # ]))
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
     test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
                                   transform=transforms.ToTensor())
+    # transforms.transforms.Compose([
+    #     transforms.Resize(32),
+    #     transforms.CenterCrop(32),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize([0.49139969, 0.48215842, 0.44653093], [0.24703223, 0.24348513, 0.26158784])
+    # ]))
     test_loader = DataLoader(test_dataset, batch_size=64,
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
@@ -187,20 +231,20 @@ if args.dataset == "cifar10":
 elif args.dataset == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 elif args.dataset == "stl10":
-    train_loader, test_loader = get_svhn_data_loaders(download=False)
+    train_loader, test_loader = get_stl10_data_loaders(download=False)
 elif args.dataset == "imagenet":
     _, test_loader = get_imagenet_data_loaders(download=False)
     train_loader = []
     # train, test both from eval for faster runs
 
 for name, param in victim_model.named_parameters():
-    if name not in ['fc.0.weight', 'fc.0.bias']:
+    if 'fc' not in name:
         param.requires_grad = False
 parameters = list(filter(lambda p: p.requires_grad, victim_model.parameters()))
-assert len(parameters) == 2  # fc.0.weight, fc.0.bias
+print(f"Retraining {len(parameters)} parameters.")
 
 # optimizer = torch.optim.Adam(victim_model.parameters(), lr=args.lr,
-#                                  weight_decay=0.0008)
+#                                  weight_decay=args.weight_decay)
 optimizer = torch.optim.SGD(victim_model.parameters(), lr=args.lr,
                                     momentum=0.9,
                                     weight_decay=args.weight_decay)
