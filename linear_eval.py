@@ -25,7 +25,7 @@ parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=50000,type=int,
                      help='Number of labeled examples to train on')
@@ -115,7 +115,7 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     return model
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled', download=download,
+    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
@@ -178,13 +178,14 @@ if args.modeltype == "stolen":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
     else:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
+    logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
     else:
         args.arch = "resnet34"
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
-logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+    logname = f'testing{args.modeltype}{args.dataset_test}.log'
 if args.clear == "True":
     if os.path.exists(os.path.join(log_dir, logname)):
         os.remove(os.path.join(log_dir, logname))

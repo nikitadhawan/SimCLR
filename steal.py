@@ -178,9 +178,9 @@ def main():
                                        args.arch, args.lossvictim,
                                        device=args.device)
     if args.stolenhead == "False":
-        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
+        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
     else:
-        model = ResNetSimCLRV2(base_model=args.arch, out_dim=args.out_dim,loss=args.lossvictim,
+        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim,loss=args.lossvictim,
                                include_mlp=True)
 
     if args.losstype == "symmetrized":
