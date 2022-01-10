@@ -13,13 +13,14 @@ import os
 import matplotlib.pyplot as plt
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLR, HeadSimCLR
+from models.resnet_simclr import ResNetSimCLRV2, HeadSimCLR
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset
 from utils import save_config_file, save_checkpoint, load_victim
+from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss
 
 
 
@@ -30,7 +31,7 @@ parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18')
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34')
 parser.add_argument('--archvic', default='resnet34')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
@@ -68,6 +69,8 @@ parser.add_argument('--n-views', default=2, type=int, metavar='N',
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
+parser.add_argument('--lossvictim', default='infonce', type=str,
+                    help='Loss function victim was trained with')
 
 
 def info_nce_loss(features):
@@ -103,9 +106,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print("Using device:", device)
-    dataset = RegularDataset(args.data)
+    if args.n_views == 1:
+        dataset = RegularDataset(args.data)
+    else:
+        dataset = ContrastiveLearningDataset(args.data)
     query_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
-    indxs = list(range(0, len(query_dataset) - 1000 * args.n_views - (9000-args.num_queries) * args.n_views))
+    indxs = list(range(0, len(query_dataset) - 1000))
     query_dataset = torch.utils.data.Subset(query_dataset,
                                             indxs)  # query set (without last 1000 samples in the test set)
 
@@ -113,13 +119,15 @@ if __name__ == "__main__":
         query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    victim_model = ResNetSimCLR(base_model=args.archvic,
+    victim_model = ResNetSimCLRV2(base_model=args.archvic,
                                   out_dim=args.out_dim, include_mlp=False).to(device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
-                                             device=device, discard_mlp=True)
+                               args.archvic, args.lossvictim,
+                               device=device, discard_mlp=True)
     victim_model.eval()
     print("Loaded victim")
     head = HeadSimCLR(out_dim=args.out_dim).to(device)
+    head.train()
     print("Initialized head")
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
     if os.path.exists(os.path.join(log_dir, 'training.log')):
@@ -141,6 +149,10 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(head.parameters(), args.lrhead,
                                  weight_decay=args.weight_decay)
 
+    # optimizer = torch.optim.SGD(head.parameters(), lr=args.lrhead,
+    #                             momentum=0.9,
+    #                             weight_decay=args.weight_decay)
+
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
         query_loader), eta_min=0,last_epoch=-1)
     criterion = torch.nn.CrossEntropyLoss().to(device)
@@ -153,7 +165,7 @@ if __name__ == "__main__":
             images = images.to(device)
 
             rep = victim_model(images) # h from victim
-            features = head(rep)
+            features = head(rep) # pass representation through head being trained.
             logits, labels = info_nce_loss(features)
             loss = criterion(logits, labels)
 
@@ -191,15 +203,39 @@ if __name__ == "__main__":
     # Stealing loop with recreated head from the victim.
     head.eval()
 
-    stolen_model = ResNetSimCLR(base_model=args.arch,
+    stolen_model = ResNetSimCLRV2(base_model=args.arch,
                             out_dim=args.out_dim, include_mlp=True).to(device)
+    stolen_model.train()
 
     optimizer = torch.optim.Adam(stolen_model.parameters(), args.lr,   # Maybe change the optimizer
                                  weight_decay=args.weight_decay)
 
+    # optimizer = torch.optim.SGD(stolen_model.parameters(), lr=args.lr,
+    #                             momentum=0.9,
+    #                             weight_decay=args.weight_decay)
+
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(
         query_loader), eta_min=0,last_epoch=-1)
 
+    if args.losstype == "infonce":
+        criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+    elif args.losstype == "softce":
+        criterion = soft_cross_entropy
+    elif args.losstype == "wasserstein":
+        criterion = wasserstein_loss()
+    elif args.losstype == "mse":
+        criterion = nn.MSELoss().to(self.args.device)
+    elif args.losstype == "bce":
+        criterion = nn.BCEWithLogitsLoss()
+    elif args.losstype == "softnn":
+        criterion = soft_nn_loss
+        self.tempsn = self.args.temperaturesn
+    elif args.losstype == "supcon":
+        criterion = SupConLoss(temperature=self.args.temperature)
+    elif args.losstype == "symmetrized":
+        criterion = nn.CosineSimilarity(dim=1)
+    elif args.losstype == "barlow":  # method from barlow twins
+        criterion = barlow_loss
     
     scaler = GradScaler(enabled=args.fp16_precision)
     logging.info(f"Start SimCLR stealing for {args.epochs} epochs.")
@@ -221,6 +257,10 @@ if __name__ == "__main__":
                 loss = criterion(logits, labels)
             elif args.losstype == "bce":
                 loss = criterion(features, torch.softmax(query_features, dim=1))
+            elif self.loss == "softnn":
+                all_features = torch.cat([features, query_features], dim=0)
+                loss = self.criterion(args, all_features,
+                                      pairwise_euclid_distance, 100)
             else:
                 loss = criterion(features, query_features)
             optimizer.zero_grad()
