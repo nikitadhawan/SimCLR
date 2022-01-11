@@ -155,12 +155,11 @@ def soft_nn_loss(args,
 
     # Can possibly combine cross entropy with this loss (as mentioned in the paper)
     batch_size = features.size()[0] 
-    n = int(features.size()[0] / args.batch_size) # I think number of augmentations. Need to update code below based on this
+    n = int(features.size()[0] / args.batch_size)
     labels = torch.cat(
             [torch.arange(args.batch_size) for i in range(n)], dim=0)
     #labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
     eps = 1e-9
-    # might need to make labels manually as is done in info_nce_loss(). 
     pairwise_dist = distance(features, features)
     pairwise_dist = pairwise_dist / temperature
     negexpd = torch.exp(-pairwise_dist)

@@ -176,9 +176,10 @@ def accuracy(output, target, topk=(1,)):
 if args.modeltype == "stolen":
     if args.head == "False":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     else:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
-    logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}{args.losstype}.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
