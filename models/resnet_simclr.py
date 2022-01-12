@@ -107,6 +107,7 @@ class HeadSimCLR(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
+
 class SimSiam(nn.Module):
     """
     Build a SimSiam model.

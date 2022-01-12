@@ -24,7 +24,7 @@ parser.add_argument('--dataset', default='cifar10',
 parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=50000,type=int,
@@ -47,6 +47,8 @@ parser.add_argument('--head', default='False', type=str,
                     help='stolen model was trained using recreated head.', choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
                     help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+parser.add_argument('--sigma', default=0.5, type=float,
+                    help='standard deviation used for perturbations')
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('-b', '--batch-size', default=256, type=int,
@@ -98,6 +100,7 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
         checkpoint = torch.load(
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}DEFENCE/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
             map_location=device)
+        print("Used defence")
 
     state_dict = checkpoint['state_dict']
     new_state_dict = {}
@@ -192,6 +195,9 @@ if args.modeltype == "stolen":
     if args.defence == "True":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+    if args.datasetsteal == "imagenet":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}IMAGENET.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"

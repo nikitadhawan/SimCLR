@@ -124,6 +124,8 @@ if __name__ == "__main__":
     print("Using device:", device)
     if args.defence == "True":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEADDEF/"
+    else:
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
     logname = f'training_{args.dataset}_{args.losstype}.log'
     if args.resume == 'False' or args.clear == "True":
         if os.path.exists(os.path.join(log_dir, logname)):
