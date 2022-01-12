@@ -22,6 +22,7 @@ class ContrastiveLearningDataset:
                                               transforms.ToTensor()])
         return data_transforms
 
+
     def get_dataset(self, name, n_views):
         valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
                                                               transform=ContrastiveLearningViewGenerator(
@@ -69,8 +70,16 @@ class ContrastiveLearningDataset:
                                                             self.get_simclr_pipeline_transform(
                                                                 32),
                                                             n_views),
-                                                        download=True)
+                                                        download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='val',
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform(
+                                      32),
+                                  n_views))
                           }
+
 
         try:
             dataset_fn = valid_datasets[name]
@@ -87,6 +96,14 @@ class RegularDataset:
     @staticmethod
     def get_simclr_pipeline_transform(size, s=1):
         data_transforms = transforms.Compose([transforms.ToTensor()])
+        return data_transforms
+
+    @staticmethod
+    def get_imagenet_transform(size, s=1):
+        data_transforms = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()])
         return data_transforms
 
     def get_dataset(self, name, n_views):
@@ -135,7 +152,14 @@ class RegularDataset:
                                                             self.get_simclr_pipeline_transform(
                                                                 32),
                                                             n_views),
-                                                        download=True)
+                                                        download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='val',
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_imagenet_transform(
+                                      32),
+                                  n_views))
                           }
 
         try:

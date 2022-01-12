@@ -22,7 +22,10 @@ class SimCLR(object):
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
         if stealing:
-            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
+            if self.args.defence == "True":
+                self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
+            else:
+                self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
         else:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
         self.stealing = stealing
@@ -195,7 +198,8 @@ class SimCLR(object):
                 # if self.args.dataset == "imagenet" and self.args.stolenhead == "True":
                 #     query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
                 if self.args.defence == "True":
-                    query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
+                    #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
+                    query_features += torch.empty(query_features.size()).normal_(mean=0,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 if self.loss != "symmetrized":
                     features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":

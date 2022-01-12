@@ -293,7 +293,7 @@ if __name__ == "__main__":
     head.eval()
     n_iter = 0
     stolen_model = ResNetSimCLRV2(base_model=args.arch,
-                            out_dim=args.out_dim, include_mlp=True).to(device)
+                            out_dim=args.out_dim, include_mlp=True).to(device) # stolen model using head
     if args.losstype == "symmetrized":
         stolen_model = SimSiam(torchvision.models.__dict__[args.arch], args.out_dim, args.out_dim).to(device)
     stolen_model.train()

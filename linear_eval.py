@@ -45,6 +45,8 @@ parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
 parser.add_argument('--head', default='False', type=str,
                     help='stolen model was trained using recreated head.', choices=['True', 'False'])
+parser.add_argument('--defence', default='False', type=str,
+                    help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('-b', '--batch-size', default=256, type=int,
@@ -86,10 +88,17 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
 
     if args.head == "False":
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar", map_location=device)
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
+            map_location=device)
     else:
         checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
+        
+    if args.defence == "True":
+        checkpoint = torch.load(
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}DEFENCE/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
+            map_location=device)
+
     state_dict = checkpoint['state_dict']
     new_state_dict = {}
     # Remove head.
@@ -180,6 +189,9 @@ if args.modeltype == "stolen":
     else:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}{args.losstype}.log'
+    if args.defence == "True":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
+        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
@@ -218,7 +230,7 @@ elif args.dataset_test == 'stl10':
 elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 
-# freeze all layers but the last fc
+# freeze all layers but the last fc (can try by training all layers)
 for name, param in model.named_parameters():
     if name not in ['fc.weight', 'fc.bias']:
         param.requires_grad = False

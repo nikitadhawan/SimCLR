@@ -338,7 +338,7 @@ class BarlowTwins(nn.Module):
 
 def barlow_loss(z1, z2, device):
     # z1, z2 are projections of two augmentations
-    bn = nn.BatchNorm1d(512, affine=False).to(device)
+    bn = nn.BatchNorm1d(z1.shape[1], affine=False).to(device)
     # empirical cross-correlation matrix
     c = bn(z1).T @ bn(z2)
     batch_size = z1.shape[0]

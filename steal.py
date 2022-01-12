@@ -18,7 +18,7 @@ parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn'])
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
                     help='model architecture: ' +
@@ -77,6 +77,8 @@ parser.add_argument('--stolenhead', default='False', type=str,
                     help='Use an additional head while training the stolen model.', choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
                     help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+parser.add_argument('--sigma', default=0.5, type=float,
+                    help='standard deviation used for perturbations')
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 
