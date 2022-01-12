@@ -80,6 +80,10 @@ parser.add_argument('--resume', default='True', type=str, choices=['True', 'Fals
                     help='Resume from previous checkpoint for head')
 parser.add_argument('--clear', default='True', type=str, choices=['True', 'False'],
                     help='Clear previous logs')
+parser.add_argument('--defence', default='False', type=str,
+                    help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+parser.add_argument('--sigma', default=0.5, type=float,
+                    help='standard deviation used for perturbations')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 
@@ -118,7 +122,8 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args.device = device
     print("Using device:", device)
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
+    if args.defence == "True":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEADDEF/"
     logname = f'training_{args.dataset}_{args.losstype}.log'
     if args.resume == 'False' or args.clear == "True":
         if os.path.exists(os.path.join(log_dir, logname)):
@@ -163,7 +168,7 @@ if __name__ == "__main__":
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                    args.archvic, args.lossvictim,
                                    device=device, discard_mlp=True) # used to train the head
-        assert args.losshead == "mse" #use mse if we have access to the victim head
+        assert args.losshead == "msewithhead" #use mse if we have access to the victim head
         victim_modelhead.eval()
     victim_model.eval()
     print("Loaded victim")
@@ -178,6 +183,9 @@ if __name__ == "__main__":
         elif args.losshead == "wasserstein":
             criterion = wasserstein_loss()
         elif args.losshead == "mse":
+            criterion = nn.MSELoss().to(device)
+            assert args.n_views == 2 # need two views to compare
+        elif args.losshead == "msewithhead":
             assert args.victimhead == "True" # can use mse only with access to victim head
             criterion = nn.MSELoss().to(device)
         elif args.losshead == "bce":
@@ -221,6 +229,8 @@ if __name__ == "__main__":
                 images = images.to(device)
 
                 rep = victim_model(images) # h from victim
+                if args.defence == "True":
+                    rep += torch.empty(rep.size()).normal_(mean=0,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 features = head(rep) # pass representation through head being trained.
                 if args.losshead == "infonce":
                     logits, labels = info_nce_loss(features)
@@ -229,6 +239,14 @@ if __name__ == "__main__":
                     loss = criterion(args, features,
                                           pairwise_euclid_distance, args.tempsn)
                 elif args.losshead == "mse":
+                    x1 = images[:int(len(images) / 2)]
+                    x2 = images[int(len(images) / 2):]
+                    rep1 = victim_model(x1)
+                    rep2 = victim_model(x2)
+                    features1 = head(rep1)
+                    features2 = head(rep2)
+                    loss = criterion(features1, features2) # minimize distance between the representations of two augmentations of the same image.
+                elif args.losshead == "msewithhead":
                     zvic = victim_modelhead(images)
                     loss = criterion(features, zvic)
 

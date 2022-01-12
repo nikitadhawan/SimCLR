@@ -93,7 +93,7 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     else:
         checkpoint = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
-        
+
     if args.defence == "True":
         checkpoint = torch.load(
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}DEFENCE/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
