@@ -71,6 +71,7 @@ class SimCLR(object):
             self.criterion = barlow_loss
         else:
             raise RuntimeError(f"Loss function {self.loss} not supported.")
+        self.criterion2 = nn.CosineSimilarity(dim=1) # for the defence
 
 
     def info_nce_loss(self, features):
@@ -196,18 +197,27 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                if self.args.defence == "True"
+                if self.args.defence == "True":
                     if all_reps == None:
                         all_reps = query_features
                     else:
                         # compare the new representations with existing ones
-                        all_reps = torch.cat([all_reps, query_features], dim=0)
-                    if self.args.dataset == "imagenet" and self.args.stolenhead == "True":
-                        query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
-                if self.args.defence == "True":
-                    #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
-                    if self.args.sigma > 0:
-                        query_features += torch.empty(query_features.size()).normal_(mean=5,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
+                        query_features2 = query_features.clone().detach() # original ones without noise
+                        for i in range(query_features.shape[0]):
+                            #sims = self.criterion2(query_features[i].expand(all_reps.shape[0], all_reps.shape[1]), all_reps)
+                            #sims = (sims>0.75).to(torch.float32) # with cosine similarity
+                            sims = (query_features[i].expand(all_reps.shape[0], all_reps.shape[1])-all_reps).pow(2).sum(1).sqrt()
+                            sims = (sims < 15).to(torch.float32)
+                            if sims.sum().item() > 0:
+                                query_features[i] += torch.empty(query_features[i].size()).normal_(mean=100,std=self.args.sigma).to(self.args.device)
+                        all_reps = torch.cat([all_reps, query_features2], dim=0)
+
+                # if self.args.dataset == "imagenet" and self.args.stolenhead == "True":
+                #     query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
+                # if self.args.defence == "True": # Second type of defence
+                #     #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
+                #     if self.args.sigma > 0:
+                #         query_features += torch.empty(query_features.size()).normal_(mean=5,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 if self.loss != "symmetrized":
                     features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
@@ -242,6 +252,12 @@ class SimCLR(object):
                     p1, p2, _, _ = self.model(x1, x2)
                     y1 = self.victim_model(x1).detach()
                     y2 = self.victim_model(x2).detach() # raw representations from victim
+                    # criterion2 = torch.nn.CosineSimilarity(dim=1)
+                    # print(criterion2(y1, y2))
+                    # print("similarity between same examples",criterion2(y1,y2).mean())
+                    # print("similarity between different examples", criterion2(y2[:int(len(y1)/2)], y2[int(len(y1)/2):]).mean())
+                    print("l2 distance between same examples", (y1-y2).pow(2).sum(1).sqrt().mean())
+                    print("l2 distance between different examples", (y1[:int(len(y1)/2)] - y1[int(len(y1)/2):]).pow(2).sum(1).sqrt().mean())
                     z1 = self.model.encoder.fc(y1)
                     z2 = self.model.encoder.fc(y2) # pass representations through attacker's encoder. This gives a better performance.
                     loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
