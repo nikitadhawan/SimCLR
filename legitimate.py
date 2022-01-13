@@ -162,7 +162,7 @@ if __name__ == "__main__":
     n_iter = 0
     logging.info(f"Start head (legitimate) training for {args.epochs} epochs.")
     logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
-    logging.info(f"Using loss type: {args.losshead}")
+    logging.info(f"Args: {args}")
     optimizer = torch.optim.Adam(head.parameters(), args.lrhead,
                                  weight_decay=args.weight_decay)
     criterion = torch.nn.CrossEntropyLoss().to(device)
@@ -185,7 +185,8 @@ if __name__ == "__main__":
 
             rep = victim_model(images) # h from victim
             if args.defence == "True":
-                rep += torch.empty(rep.size()).normal_(mean=0,std=args.sigma).to(device)  # add random noise to embeddings
+                if args.sigma > 0:
+                    rep += torch.empty(rep.size()).normal_(mean=0,std=args.sigma).to(device)  # add random noise to embeddings
             logits = head(rep) # pass representation through head being trained.
 
             loss = criterion(logits, labels)
@@ -228,14 +229,4 @@ if __name__ == "__main__":
             f"Epoch {epoch_counter}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
     logging.info("Head training has finished.")
-    # #save model checkpoints
-    # checkpoint_name = f'{args.dataset}_checkpoint_{args.epochs}_{args.losshead}_head.pth.tar'
-    # save_checkpoint({
-    #     'epoch': args.epochs,
-    #     'arch': args.arch,
-    #     'state_dict': head.state_dict(),
-    #     'optimizer': optimizer.state_dict(),
-    # }, is_best=False,
-    #     filename=os.path.join(log_dir, checkpoint_name))
-    # logging.info(
-    #     f"Head checkpoint and metadata has been saved at {log_dir}")
+    
