@@ -49,6 +49,8 @@ parser.add_argument('--defence', default='False', type=str,
                     help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
 parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
+parser.add_argument('--mu', default=5, type=float,
+                    help='mean noise used for perturbations')
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('-b', '--batch-size', default=256, type=int,

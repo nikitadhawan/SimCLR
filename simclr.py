@@ -197,7 +197,7 @@ class SimCLR(object):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
                 query_features = self.victim_model(images) # victim model representations
-                if self.args.defence == "True":
+                if self.args.defence == "True" and self.loss in ["softnn", "infonce"]: # first type of defence
                     if all_reps == None:
                         all_reps = query_features
                     else:
@@ -209,15 +209,13 @@ class SimCLR(object):
                             sims = (query_features[i].expand(all_reps.shape[0], all_reps.shape[1])-all_reps).pow(2).sum(1).sqrt()
                             sims = (sims < 15).to(torch.float32)
                             if sims.sum().item() > 0:
-                                query_features[i] += torch.empty(query_features[i].size()).normal_(mean=100,std=self.args.sigma).to(self.args.device)
+                                query_features[i] += torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device)
                         all_reps = torch.cat([all_reps, query_features2], dim=0)
 
-                # if self.args.dataset == "imagenet" and self.args.stolenhead == "True":
-                #     query_features = self.model.backbone.fc(query_features).detach() # pass victim representations through stolen head
-                # if self.args.defence == "True": # Second type of defence
-                #     #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
-                #     if self.args.sigma > 0:
-                #         query_features += torch.empty(query_features.size()).normal_(mean=5,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
+                elif self.args.defence == "True": # Second type of defence
+                    #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
+                    if self.args.sigma > 0:
+                        query_features += torch.empty(query_features.size()).normal_(mean=self.args.mu,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 if self.loss != "symmetrized":
                     features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":
