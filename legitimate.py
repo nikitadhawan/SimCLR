@@ -110,7 +110,7 @@ if __name__ == "__main__":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}LEGITDEF/"
     else:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}LEGIT/"
-    logname = f'training_{args.dataset}.log'
+    logname = f'training_{args.dataset}_{args.losstype}.log'
     if args.resume == 'False' or args.clear == "True":
         if os.path.exists(os.path.join(log_dir, logname)):
             os.remove(os.path.join(log_dir, logname))
@@ -177,6 +177,7 @@ if __name__ == "__main__":
     for epoch_counter in range(args.epochs):
         total_queries = 0
         top1_train_accuracy = 0
+        all_reps = None
         for counter, (images, labels) in enumerate(query_loader):
             images = torch.cat(images, dim=0)
 
@@ -184,7 +185,23 @@ if __name__ == "__main__":
             labels = labels.to(device)
 
             rep = victim_model(images) # h from victim
-            if args.defence == "True":
+            if args.defence == "True" and args.losstype in ["softnn", "infonce"] : # loss is not actually used, just for testing
+                if all_reps == None:
+                    all_reps = rep
+                else:
+                    # compare the new representations with existing ones
+                    rep2 = rep.clone().detach()  # original ones without noise
+                    for i in range(rep.shape[0]):
+                        sims = (rep[i].expand(all_reps.shape[0],
+                                                         all_reps.shape[
+                                                             1]) - all_reps).pow(2).sum(1).sqrt()
+                        sims = (sims < 15).to(torch.float32)
+                        if sims.sum().item() > 0:
+                            rep[i] += torch.empty(
+                                rep[i].size()).normal_(mean=1000,
+                                                                  std=args.sigma).to(device)
+                    all_reps = torch.cat([all_reps, rep2], dim=0)
+            elif args.defence == "True":
                 if args.sigma > 0:
                     rep += torch.empty(rep.size()).normal_(mean=0,std=args.sigma).to(device)  # add random noise to embeddings
             logits = head(rep) # pass representation through head being trained.
