@@ -181,6 +181,15 @@ def main():
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
                                        device=args.device)
+        if args.defence == "True": # Use the model head as part of the defence.
+            victim_head = ResNetSimCLRV2(base_model=args.arch,
+                                          out_dim=args.out_dim,
+                                          loss=args.lossvictim,
+                                          include_mlp=True).to(args.device)
+            victim_head = load_victim(args.epochstrain, args.dataset,
+                                       victim_head,
+                                       args.arch, args.lossvictim,
+                                       device=args.device)
     if args.stolenhead == "False":
         model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
     else:
@@ -202,9 +211,15 @@ def main():
         query_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(stealing=True, victim_model=victim_model,
-                        model=model, optimizer=optimizer, scheduler=scheduler,
-                        args=args, logdir=args.logdir, loss=args.losstype)
+        if args.defence == "True":
+            simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,
+                            model=model, optimizer=optimizer, scheduler=scheduler,
+                            args=args, logdir=args.logdir, loss=args.losstype)
+        else:
+            simclr = SimCLR(stealing=True, victim_model=victim_model,
+                            model=model, optimizer=optimizer,
+                            scheduler=scheduler,
+                            args=args, logdir=args.logdir, loss=args.losstype)
         simclr.steal(query_loader, args.num_queries)
 
 

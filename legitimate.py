@@ -79,6 +79,8 @@ parser.add_argument('--defence', default='False', type=str,
                     help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
 parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
+parser.add_argument('--mu', default=5, type=float,
+                    help='mean noise used for perturbations')
 parser.add_argument('--victimhead', default='False', type=str,
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 
@@ -147,7 +149,16 @@ if __name__ == "__main__":
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                args.archvic, args.lossvictim,
                                device=device, discard_mlp=True)
+    victim_head = ResNetSimCLRV2(base_model=args.arch,
+                                 out_dim=args.out_dim,
+                                 loss=args.lossvictim,
+                                 include_mlp=True).to(args.device)
+    victim_head = load_victim(args.epochstrain, args.dataset,
+                              victim_head,
+                              args.arch, args.lossvictim,
+                              device=args.device)
     victim_model.eval()
+    victim_head.eval()  # only used for the defense by the victim
     print("Loaded victim")
 
 
@@ -186,24 +197,29 @@ if __name__ == "__main__":
 
             rep = victim_model(images) # h from victim
             if args.defence == "True" and args.losstype in ["softnn", "infonce"] : # loss is not actually used, just for testing
-                if all_reps == None:
-                    all_reps = rep
-                else:
-                    # compare the new representations with existing ones
-                    rep2 = rep.clone().detach()  # original ones without noise
-                    for i in range(rep.shape[0]):
-                        sims = (rep[i].expand(all_reps.shape[0],
-                                                         all_reps.shape[
-                                                             1]) - all_reps).pow(2).sum(1).sqrt()
-                        sims = (sims < 15).to(torch.float32)
-                        if sims.sum().item() > 0:
-                            rep[i] += torch.empty(
-                                rep[i].size()).normal_(mean=1000,
-                                                                  std=args.sigma).to(device)
-                    all_reps = torch.cat([all_reps, rep2], dim=0)
+                # if all_reps == None:
+                #     all_reps = rep
+                # else:
+                #     # compare the new representations with existing ones
+                # rep2 = rep.clone().detach()  # original ones without noise
+
+
+                rep2 = victim_head(images)
+                all_reps = torch.t(rep2[0].reshape(-1,1))
+                for i in range(1, rep.shape[0]):
+                    sims = (rep2[i].expand(all_reps.shape[0],
+                                                     all_reps.shape[
+                                                         1]) - all_reps).pow(2).sum(1).sqrt()
+                    sims = (sims < 13).to(torch.float32)
+                    if sims.sum().item() > 0 and args.sigma > 0:
+                        # was +=
+                        rep[i] = torch.empty(
+                            rep[i].size()).normal_(mean=1000,
+                                                              std=args.sigma).to(device)
+                    all_reps = torch.cat([all_reps, torch.t(rep2[i].reshape(-1,1))], dim=0)
             elif args.defence == "True":
                 if args.sigma > 0:
-                    rep += torch.empty(rep.size()).normal_(mean=0,std=args.sigma).to(device)  # add random noise to embeddings
+                    rep += torch.empty(rep.size()).normal_(mean=args.mu,std=args.sigma).to(device)  # add random noise to embeddings
             logits = head(rep) # pass representation through head being trained.
 
             loss = criterion(logits, labels)
