@@ -248,6 +248,27 @@ if __name__ == "__main__":
             y_batch = y_batch.to(device)
 
             rep = victim_model(x_batch)
+            if args.defence == "True" and args.losstype in ["softnn", "infonce"] : # loss is not actually used, just for testing this specific method
+
+                rep2 = victim_head(x_batch)
+                all_reps = torch.t(rep2[0].reshape(-1,1))
+                for i in range(1, rep.shape[0]):
+                    sims = (rep2[i].expand(all_reps.shape[0],
+                                                     all_reps.shape[
+                                                         1]) - all_reps).pow(2).sum(1).sqrt()
+                    sims = (sims < 13).to(torch.float32)
+                    if sims.sum().item() > 0 and args.sigma > 0:
+                        # was +=
+                        rep[i] = torch.empty(
+                            rep[i].size()).normal_(mean=1000,
+                                                              std=args.sigma).to(device)
+                    all_reps = torch.cat([all_reps, torch.t(rep2[i].reshape(-1,1))], dim=0)
+            elif args.defence == "True":
+                if args.sigma > 0:
+                    rep += torch.empty(rep.size()).normal_(mean=args.mu,std=args.sigma).to(device)  # add random noise to embeddings
+
+
+
             logits = head(rep)
 
             top1, top5 = accuracy(logits, y_batch, topk=(1, 5))
