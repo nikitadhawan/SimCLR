@@ -177,6 +177,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(head.parameters(), args.lrhead,
                                  weight_decay=args.weight_decay)
     criterion = torch.nn.CrossEntropyLoss().to(device)
+    criterion2 = nn.CosineSimilarity(dim=1)
 
     # optimizer = torch.optim.SGD(head.parameters(), lr=args.lrhead,
     #                             momentum=0.9,
@@ -207,10 +208,15 @@ if __name__ == "__main__":
                 rep2 = victim_head(images)
                 all_reps = torch.t(rep2[0].reshape(-1,1))
                 for i in range(1, rep.shape[0]):
-                    sims = (rep2[i].expand(all_reps.shape[0],
-                                                     all_reps.shape[
-                                                         1]) - all_reps).pow(2).sum(1).sqrt()
-                    sims = (sims < 13).to(torch.float32)
+                    # sims = (rep2[i].expand(all_reps.shape[0],
+                    #                                  all_reps.shape[
+                    #                                      1]) - all_reps).pow(2).sum(1).sqrt() #l2 distance
+                    # sims = (sims < 13).to(torch.float32)
+                    sims = criterion2(
+                        rep2[i].expand(all_reps.shape[0],
+                                                  all_reps.shape[1]), all_reps) # cosine similarity
+                    sims = (sims > 0.5).to(
+                        torch.float32)  # with cosine similarity
                     if sims.sum().item() > 0 and args.sigma > 0:
                         # was +=
                         rep[i] = torch.empty(
