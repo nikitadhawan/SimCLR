@@ -101,8 +101,7 @@ class RegularDataset:
     @staticmethod
     def get_imagenet_transform(size, s=1):
         data_transforms = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.RandomResizedCrop(size),
         transforms.ToTensor()])
         return data_transforms
 
