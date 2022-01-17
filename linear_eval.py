@@ -297,6 +297,6 @@ for epoch in range(epochs):
 
 if args.save == "True":
     if args.modeltype == "stolen":
-        torch.save(model.state_dict(), 'runs/eval/stolen_linear.pth.tar')
+        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
     else:
-        torch.save(model.state_dict(), 'runs/eval/victim_linear.pth.tar')
+        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")

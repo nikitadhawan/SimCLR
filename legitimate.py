@@ -215,7 +215,7 @@ if __name__ == "__main__":
                     sims = criterion2(
                         rep2[i].expand(all_reps.shape[0],
                                                   all_reps.shape[1]), all_reps) # cosine similarity
-                    sims = (sims > 0.5).to(
+                    sims = (sims > 0.5 and sims != 1.0).to(
                         torch.float32)  # with cosine similarity
                     if sims.sum().item() > 0 and args.sigma > 0:
                         # was +=
