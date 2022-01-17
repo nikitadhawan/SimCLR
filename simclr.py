@@ -10,12 +10,13 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
 from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss
+import scipy.stats
 
 torch.manual_seed(0)
 
 class SimCLR(object):
 
-    def __init__(self, stealing=False, victim_model=None, victim_head = None, logdir='', loss=None, *args,
+    def __init__(self, stealing=False, victim_model=None, victim_head = None, entropy_model = None, logdir='', loss=None, *args,
                  **kwargs):
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
@@ -53,6 +54,7 @@ class SimCLR(object):
             self.victim_model = victim_model.to(self.args.device)
             if self.args.defence == "True":
                 self.victim_head = victim_head.to(self.args.device)
+                self.entropy_model = entropy_model.to(self.args.device)
         if self.loss == "infonce":
             self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         elif self.loss == "softce":
@@ -183,6 +185,7 @@ class SimCLR(object):
         self.victim_model.eval()
         if self.args.defence == "True":
             self.victim_head.eval()
+            self.entropy_model.eval()
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -205,6 +208,15 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 if self.args.defence == "True" and self.loss in ["softnn", "infonce"]: # first type of perturbation defence
                     query_features2 = self.victim_head(images)
+                    entropyrep = self.entropy_model(images)
+                    prob = F.softmax(entropyrep, dim=1).detach().cpu().numpy()
+                    entropy = scipy.stats.entropy(prob, axis=1)
+                    # entropy.append(scipy.stats.entropy(prob, axis=1))
+                    # entropy = np.concatenate(entropy, axis=0)
+                    # # Maximum entropy is achieved when the distribution is uniform.
+                    entropy_max = np.log(10)
+                    entropy = (entropy/entropy_max).sum()
+                    #print("entropy", entropy)
                     #all_reps = query_features2[0].reshape(-1,1)
                     #print("shape", all_reps.shape)
                     all_reps = torch.t(query_features2[0].reshape(-1,1)) # start recording representations every batch (this might need to be changed)

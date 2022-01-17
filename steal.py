@@ -7,6 +7,7 @@ from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
 from models.resnet_simclr import ResNetSimCLRV2, SimSiam
 from simclr import SimCLR
 from utils import load_victim
+import os
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -190,6 +191,10 @@ def main():
                                        victim_head,
                                        args.arch, args.lossvictim,
                                        device=args.device)
+            # model to be used for entropy calculation (assumes specific downstream task being used)
+            entropy_model = models.resnet50(pretrained=False,
+                                                num_classes=10).to(args.device)
+            entropy_model.load_state_dict(torch.load(f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.datasetsteal}.pth.tar"))
     if args.stolenhead == "False":
         model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
     else:
@@ -212,7 +217,7 @@ def main():
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
         if args.defence == "True":
-            simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,
+            simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
                             model=model, optimizer=optimizer, scheduler=scheduler,
                             args=args, logdir=args.logdir, loss=args.losstype)
         else:
