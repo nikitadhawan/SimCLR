@@ -43,7 +43,7 @@ parser.add_argument('--fp16-precision', action='store_true',
                     help='Whether or not to use 16-bit precision GPU training.')
 
 parser.add_argument('--out_dim', default=128, type=int,
-                    help='feature dimension (default: 128)')
+                    help='feature dimension (default: 128). This is the dimension of z = g(h).')
 parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
@@ -88,7 +88,7 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model = ResNetSimCLR(base_model=args.arch, out_dim=512, entropy=args.entropy)
+    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, entropy=args.entropy)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                  weight_decay=args.weight_decay)

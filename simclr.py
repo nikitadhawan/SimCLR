@@ -261,7 +261,11 @@ class SimCLR(object):
                     # entropy_max = np.log(10)
                     # entropy = (entropy/entropy_max).sum()
                     #entropy = entropy_rep(query_features.detach().cpu().numpy())
-                    entropy = scipy.stats.entropy(F.softmax(query_features2, dim=1).detach().cpu().numpy(),axis=1).sum()
+                    if self.args.entropy == "True":
+                        entropy = scipy.stats.entropy(query_features2.detach().cpu().numpy(),
+                                                      axis=1).sum()
+                    else:
+                        entropy = scipy.stats.entropy(F.softmax(query_features2, dim=1).detach().cpu().numpy(),axis=1).sum()
                     print("entropy", entropy)
                     #all_reps = query_features2[0].reshape(-1,1)
                     all_reps = torch.t(query_features2[0].reshape(-1,1)) # start recording representations every batch (this might need to be changed)

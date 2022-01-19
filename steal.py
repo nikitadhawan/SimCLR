@@ -86,7 +86,8 @@ parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
                     help='Evaluate with watermark model from victim', choices=['True', 'False'])
-
+parser.add_argument('--entropy', default='False', type=str,
+                    help='Use entropy victim model', choices=['True', 'False'])
 
 def main():
     args = parser.parse_args()
@@ -149,24 +150,6 @@ def main():
         query_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    # if args.victimhead == "False":
-    #     victim_model = ResNetSimCLR(base_model=args.arch,
-    #                                 out_dim=args.out_dim, loss=args.lossvictim, include_mlp=False).to(
-    #         args.device)
-    #     victim_model = load_victim(args.epochstrain, args.dataset, victim_model, args.arch, args.lossvictim,
-    #                                          device=args.device, discard_mlp=True)
-    # else:
-    #     victim_model = ResNetSimCLR(base_model=args.arch,
-    #                                 out_dim=args.out_dim, loss=args.lossvictim, include_mlp=True).to(
-    #         args.device)
-    #     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,args.arch, args.lossvictim,
-    #                                device=args.device, discard_mlp=False)
-    # if args.stolenhead == "False":
-    #     model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
-    #                          include_mlp=False)
-    # else:
-    #     model = ResNetSimCLR(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype,
-    #                          include_mlp=True)
     if args.dataset == "imagenet":
         victim_model = models.resnet50(pretrained=True)
         victim_model.fc = torch.nn.Identity()
@@ -177,7 +160,7 @@ def main():
                                           out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
-                                       device=args.device, discard_mlp = True, watermark=args.watermark)
+                                       device=args.device, discard_mlp = True, watermark=args.watermark, entropy=args.entropy)
         else:
             victim_model = ResNetSimCLRV2(base_model=args.arch,
                                           out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
@@ -192,7 +175,7 @@ def main():
             victim_head = load_victim(args.epochstrain, args.dataset,
                                        victim_head,
                                        args.arch, args.lossvictim,
-                                       device=args.device)
+                                       device=args.device, entropy=args.entropy)
             # model to be used for entropy calculation (assumes specific downstream task being used)
             entropy_model = models.resnet50(pretrained=False,
                                                 num_classes=10).to(args.device)
