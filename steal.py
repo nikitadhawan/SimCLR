@@ -177,7 +177,7 @@ def main():
                                           out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
-                                       device=args.device, discard_mlp = True)
+                                       device=args.device, discard_mlp = True, watermark=args.watermark)
         else:
             victim_model = ResNetSimCLRV2(base_model=args.arch,
                                           out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
@@ -203,15 +203,18 @@ def main():
             watermark_loader = torch.utils.data.DataLoader(
                 watermark_dataset, batch_size=args.batch_size, shuffle=True,
                 num_workers=args.workers, pin_memory=True, drop_last=True)
-            watermark_mlp = WatermarkMLP(128,2) # make 512
+            if args.stolenhead == "False":
+                watermark_mlp = WatermarkMLP(512,2)
+            else:
+                watermark_mlp = WatermarkMLP(128, 2)
             watermark_mlp = load_watermark(args.epochstrain, args.dataset,
                                        watermark_mlp,
                                        args.arch, args.lossvictim,
                                        device=args.device)
     if args.stolenhead == "False":
-        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False)
+        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype, include_mlp = False)
     else:
-        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim,loss=args.lossvictim,
+        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim,loss=args.losstype,
                                include_mlp=True)
 
     if args.losstype == "symmetrized":

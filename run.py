@@ -59,6 +59,8 @@ parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
                     help='Use watermarking when training the model', choices=['True', 'False'])
+parser.add_argument('--entropy', default='False', type=str,
+                    help='Additional softmax layer when training the model', choices=['True', 'False'])
 
 
 def main():
@@ -86,7 +88,7 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model = ResNetSimCLR(base_model=args.arch, out_dim=512)
+    model = ResNetSimCLR(base_model=args.arch, out_dim=512, entropy=args.entropy)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                  weight_decay=args.weight_decay)

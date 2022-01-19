@@ -23,7 +23,8 @@ class SimCLR(object):
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
-        self.watermark_mlp = watermark_mlp.to(self.args.device)
+        if watermark_mlp is not None:
+            self.watermark_mlp = watermark_mlp.to(self.args.device)
         if stealing:
             if self.args.defence == "True":
                 self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
@@ -121,6 +122,7 @@ class SimCLR(object):
         n_iter = 0
         logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
+        logging.info(f"Args: {self.args}")
 
         for epoch_counter in range(self.args.epochs):
             for images, truelabels in tqdm(train_loader):
@@ -197,13 +199,8 @@ class SimCLR(object):
         # save model checkpoints
         if watermark_loader is None:
             checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
-            # save_checkpoint({
-            #     'epoch': self.args.epochs,
-            #     'arch': self.args.arch,
-            #     'state_dict': self.model.state_dict(),
-            #     'optimizer': self.optimizer.state_dict(),
-            # }, is_best=False,
-            #     filename=os.path.join(self.log_dir, checkpoint_name))
+            if self.args.entropy == "True":
+                checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}ENTROPY.pth.tar'
             save_checkpoint({
                 'epoch': self.args.epochs,
                 'arch': self.args.arch,
@@ -217,7 +214,7 @@ class SimCLR(object):
                 'epoch': self.args.epochs,
                 'arch': self.args.arch,
                 'state_dict': self.model.state_dict(),
-                'watermark_steal_dict': self.watermark_mlp.state_dict(),
+                'watermark_state_dict': self.watermark_mlp.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
             }, is_best=False,
                 filename=os.path.join(self.log_dir2, checkpoint_name))
@@ -407,6 +404,8 @@ class SimCLR(object):
         logging.info(
             f"Stolen model checkpoint and metadata has been saved at {self.log_dir2}.")
         if watermark_loader is not None:
+            self.watermark_mlp.eval()
+            self.model.eval()
             watermark_accuracy = 0
             for counter, (x_batch, _) in enumerate(watermark_loader):
                 x_batch = torch.cat(x_batch, dim=0)
@@ -418,4 +417,4 @@ class SimCLR(object):
                 top1 = accuracy(logits, y_batch, topk=(1,))
                 watermark_accuracy += top1[0]
             watermark_accuracy /= (counter + 1)
-            logging.info(f"Watermark accuracy is {watermark_accuracy}.")
+            logging.info(f"Watermark accuracy is {watermark_accuracy.item()}.")

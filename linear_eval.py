@@ -58,19 +58,32 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
+parser.add_argument('--watermark', default='False', type=str,
+                    help='Watermark used when training the model', choices=['True', 'False'])
+parser.add_argument('--entropy', default='False', type=str,
+                    help='Additional softmax layer when training the model', choices=['True', 'False'])
 args = parser.parse_args()
 
 
-def load_victim(epochs, dataset, model, loss, device):
+def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
 
     print("Loading victim model: ")
     if dataset == "imagenet":
         model = torchvision.models.resnet50(pretrained=True).to(device)
         model.fc = torch.nn.Linear(2048, 10).to(device)
         return model
-    checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
-        map_location=device)
+    if watermark == "True":
+        checkpoint = torch.load(
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}WATERMARK.pth.tar",
+            map_location=device)
+    elif entropy == "True":
+        checkpoint = torch.load(
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}ENTROPY.pth.tar",
+            map_location=device)
+    else:
+        checkpoint = torch.load(
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+            map_location=device)
     state_dict = checkpoint['state_dict']
     new_state_dict = {}
     # Remove head.
@@ -223,7 +236,7 @@ elif args.arch == 'resnet50':
     model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
 
 if args.modeltype == "victim":
-    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,
+    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
                                          device=device)
     print("Evaluating victim")
 else:

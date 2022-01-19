@@ -8,7 +8,7 @@ from exceptions.exceptions import InvalidBackboneError
 
 class ResNetSimCLR(nn.Module):
 
-    def __init__(self, base_model, out_dim, loss=None, include_mlp = True):
+    def __init__(self, base_model, out_dim, loss=None, include_mlp = True, entropy=False):
         super(ResNetSimCLR, self).__init__()
         self.resnet_dict = {"resnet18": models.resnet18(pretrained=False, num_classes=out_dim),
                             "resnet34": models.resnet34(pretrained=False,
@@ -17,6 +17,7 @@ class ResNetSimCLR(nn.Module):
 
         self.backbone = self._get_basemodel(base_model)
         self.loss = loss
+        self.entropy = entropy
         dim_mlp = self.backbone.fc.in_features # 512
         if include_mlp:
             # add mlp projection head
@@ -46,6 +47,8 @@ class ResNetSimCLR(nn.Module):
     def forward(self, x):
         # if self.loss == "supcon":
         #     return F.normalize(self.backbone(x), dim=1)
+        if self.entropy == "True":
+            return F.softmax(self.backbone(x), dim=1)
         return self.backbone(x)
 
 
@@ -75,7 +78,7 @@ class ResNetSimCLRV2(nn.Module):
             model = self.resnet_dict[model_name]
         except KeyError:
             raise InvalidBackboneError(
-                "Invalid backbone architecture. Check the config file and pass one of: resnet18 or resnet50")
+                "Invalid backbone architecture. Check the config file and pass one of: resnet18, resnet34 or resnet50")
         else:
             return model
 
