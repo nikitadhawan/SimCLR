@@ -1,7 +1,7 @@
 from torchvision.transforms import transforms
 from data_aug.gaussian_blur import GaussianBlur
 from torchvision import transforms, datasets
-from data_aug.view_generator import ContrastiveLearningViewGenerator
+from data_aug.view_generator import ContrastiveLearningViewGenerator, WatermarkViewGenerator
 from exceptions.exceptions import InvalidDatasetSelection
 import os
 
@@ -156,6 +156,66 @@ class RegularDataset:
                               root="/scratch/ssd002/datasets/imagenet256/",
                               split='val',
                               transform=ContrastiveLearningViewGenerator(
+                                  self.get_imagenet_transform(
+                                      32),
+                                  n_views))
+                          }
+
+        try:
+            dataset_fn = valid_datasets[name]
+        except KeyError:
+            raise InvalidDatasetSelection()
+        else:
+            return dataset_fn()
+
+
+class WatermarkDataset:
+    def __init__(self, root_folder):
+        self.root_folder = root_folder
+
+    @staticmethod
+    def get_transform():
+        data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
+                                              transforms.ToTensor()])
+        data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
+                                              transforms.ToTensor()])
+        return [data_transform1, data_transform2]
+
+    @staticmethod
+    def get_imagenet_transform(size, s=1):
+        data_transform1 = transforms.Compose([
+            transforms.RandomResizedCrop(size),
+            transforms.RandomRotation(degrees=(0, 180)),
+            transforms.ToTensor()])
+        data_transform2 = transforms.Compose([
+            transforms.RandomResizedCrop(size),
+            transforms.RandomRotation(degrees=(180, 360)),
+             transforms.ToTensor()])
+        return [data_transform1, data_transform2]
+
+    def get_dataset(self, name, n_views):
+        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
+                                                              transform=WatermarkViewGenerator(
+                                                                  self.get_transform(),
+                                                                  n_views),
+                                                              download=True),
+
+                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled',
+                                                          transform=WatermarkViewGenerator(
+                                                              self.get_transform(),
+                                                              n_views),
+                                                          download=True),
+                          'svhn': lambda: datasets.SVHN(
+                              self.root_folder + "/SVHN",
+                              split='test',
+                              transform=WatermarkViewGenerator(
+                                  self.get_transform(),
+                                  n_views),
+                              download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='val',
+                              transform=WatermarkViewGenerator(
                                   self.get_imagenet_transform(
                                       32),
                                   n_views))

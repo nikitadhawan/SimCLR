@@ -3,10 +3,10 @@ import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
-    RegularDataset
-from models.resnet_simclr import ResNetSimCLRV2, SimSiam
+    RegularDataset, WatermarkDataset
+from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
 from simclr import SimCLR
-from utils import load_victim
+from utils import load_victim, load_watermark
 import os
 
 model_names = sorted(name for name in models.__dict__
@@ -84,6 +84,8 @@ parser.add_argument('--mu', default=5, type=float,
                     help='mean noise used for perturbations')
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
+parser.add_argument('--watermark', default='False', type=str,
+                    help='Evaluate with watermark model from victim', choices=['True', 'False'])
 
 
 def main():
@@ -195,8 +197,19 @@ def main():
             entropy_model = models.resnet50(pretrained=False,
                                                 num_classes=10).to(args.device)
             entropy_model.load_state_dict(torch.load(f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.datasetsteal}.pth.tar"))
+        if args.watermark == "True":
+            watermark_dataset = WatermarkDataset(args.data).get_dataset(
+                args.dataset, args.n_views)
+            watermark_loader = torch.utils.data.DataLoader(
+                watermark_dataset, batch_size=args.batch_size, shuffle=True,
+                num_workers=args.workers, pin_memory=True, drop_last=True)
+            watermark_mlp = WatermarkMLP(128,2) # make 512
+            watermark_mlp = load_watermark(args.epochstrain, args.dataset,
+                                       watermark_mlp,
+                                       args.arch, args.lossvictim,
+                                       device=args.device)
     if args.stolenhead == "False":
-        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False) # CHANGE TO ARCHSTOLEN AND UPDATE FOLDER NAMES
+        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.lossvictim, include_mlp = False)
     else:
         model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim,loss=args.lossvictim,
                                include_mlp=True)
@@ -220,12 +233,20 @@ def main():
             simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
                             model=model, optimizer=optimizer, scheduler=scheduler,
                             args=args, logdir=args.logdir, loss=args.losstype)
+            simclr.steal(query_loader, args.num_queries)
+        elif args.watermark == "True":
+            simclr = SimCLR(stealing=True, victim_model=victim_model,
+                            watermark_mlp=watermark_mlp,
+                            model=model, optimizer=optimizer,
+                            scheduler=scheduler,
+                            args=args, logdir=args.logdir, loss=args.losstype)
+            simclr.steal(query_loader, args.num_queries, watermark_loader)
         else:
             simclr = SimCLR(stealing=True, victim_model=victim_model,
                             model=model, optimizer=optimizer,
                             scheduler=scheduler,
                             args=args, logdir=args.logdir, loss=args.losstype)
-        simclr.steal(query_loader, args.num_queries)
+            simclr.steal(query_loader, args.num_queries)
 
 
 if __name__ == "__main__":

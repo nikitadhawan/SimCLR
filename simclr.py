@@ -9,20 +9,21 @@ import numpy as np
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss
+from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss, entropy_rep
 import scipy.stats
 
 torch.manual_seed(0)
 
 class SimCLR(object):
 
-    def __init__(self, stealing=False, victim_model=None, victim_head = None, entropy_model = None, logdir='', loss=None, *args,
+    def __init__(self, stealing=False, victim_model=None, victim_head = None, entropy_model = None, watermark_mlp = None, logdir='', loss=None, *args,
                  **kwargs):
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
+        self.watermark_mlp = watermark_mlp.to(self.args.device)
         if stealing:
             if self.args.defence == "True":
                 self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
@@ -111,7 +112,7 @@ class SimCLR(object):
         logits = logits / self.args.temperature
         return logits, labels
 
-    def train(self, train_loader):
+    def train(self, train_loader, watermark_loader=None):
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -152,6 +153,39 @@ class SimCLR(object):
                 scaler.update()
 
                 n_iter += 1
+            if watermark_loader is not None:
+                watermark_accuracy = 0
+                for images, _ in tqdm(watermark_loader):
+                    images = torch.cat(images, dim=0)
+
+                    images = images.to(self.args.device)
+
+                    with autocast(enabled=self.args.fp16_precision):
+                        #x = self.model(images) # if we want to use the head
+                        x = self.model.backbone.conv1(images)
+                        x = self.model.backbone.bn1(x)
+                        x = self.model.backbone.relu(x)
+                        x = self.model.backbone.maxpool(x)
+                        x = self.model.backbone.layer1(x)
+                        x = self.model.backbone.layer2(x)
+                        x = self.model.backbone.layer3(x)
+                        x = self.model.backbone.layer4(x)
+                        x = self.model.backbone.avgpool(x)
+                        features = torch.flatten(x, 1)
+                        logits = self.watermark_mlp(features)
+                        labels = torch.cat([torch.zeros(self.args.batch_size),
+                                            torch.ones(self.args.batch_size)],
+                                           dim=0).long().to(self.args.device)
+                        loss = self.criterion(logits, labels)
+                        w_top1 = accuracy(logits, labels, topk=(1,))
+                        watermark_accuracy += w_top1[0]
+
+                    self.optimizer.zero_grad()
+
+                    scaler.scale(loss).backward()
+
+                    scaler.step(self.optimizer)
+                    scaler.update()
 
             # warmup for the first 10 epochs
             if epoch_counter >= 10:
@@ -161,31 +195,44 @@ class SimCLR(object):
 
         logging.info("Training has finished.")
         # save model checkpoints
-        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
-        # save_checkpoint({
-        #     'epoch': self.args.epochs,
-        #     'arch': self.args.arch,
-        #     'state_dict': self.model.state_dict(),
-        #     'optimizer': self.optimizer.state_dict(),
-        # }, is_best=False,
-        #     filename=os.path.join(self.log_dir, checkpoint_name))
-        save_checkpoint({
-            'epoch': self.args.epochs,
-            'arch': self.args.arch,
-            'state_dict': self.model.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-        }, is_best=False,
-            filename=os.path.join(self.log_dir2, checkpoint_name))
+        if watermark_loader is None:
+            checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
+            # save_checkpoint({
+            #     'epoch': self.args.epochs,
+            #     'arch': self.args.arch,
+            #     'state_dict': self.model.state_dict(),
+            #     'optimizer': self.optimizer.state_dict(),
+            # }, is_best=False,
+            #     filename=os.path.join(self.log_dir, checkpoint_name))
+            save_checkpoint({
+                'epoch': self.args.epochs,
+                'arch': self.args.arch,
+                'state_dict': self.model.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+            }, is_best=False,
+                filename=os.path.join(self.log_dir2, checkpoint_name))
+        else:
+            checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}WATERMARK.pth.tar'
+            save_checkpoint({
+                'epoch': self.args.epochs,
+                'arch': self.args.arch,
+                'state_dict': self.model.state_dict(),
+                'watermark_steal_dict': self.watermark_mlp.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+            }, is_best=False,
+                filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
             f"Model checkpoint and metadata has been saved at {self.log_dir2}")
 
-    def steal(self, train_loader, num_queries):
+    def steal(self, train_loader, num_queries, watermark_loader=None):
         # Note: We use the test set to attack the model.
         self.model.train()
         self.victim_model.eval()
         if self.args.defence == "True":
             self.victim_head.eval()
             self.entropy_model.eval()
+        if watermark_loader is not None:
+            self.watermark_mlp.eval()
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
@@ -208,17 +255,18 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 if self.args.defence == "True" and self.loss in ["softnn", "infonce"]: # first type of perturbation defence
                     query_features2 = self.victim_head(images)
-                    entropyrep = self.entropy_model(images)
-                    prob = F.softmax(entropyrep, dim=1).detach().cpu().numpy()
-                    entropy = scipy.stats.entropy(prob, axis=1)
-                    # entropy.append(scipy.stats.entropy(prob, axis=1))
-                    # entropy = np.concatenate(entropy, axis=0)
-                    # # Maximum entropy is achieved when the distribution is uniform.
-                    entropy_max = np.log(10)
-                    entropy = (entropy/entropy_max).sum()
-                    #print("entropy", entropy)
+                    # entropyrep = self.entropy_model(images)
+                    # prob = F.softmax(entropyrep, dim=1).detach().cpu().numpy()
+                    # entropy = scipy.stats.entropy(prob, axis=1)
+                    # # entropy.append(scipy.stats.entropy(prob, axis=1))
+                    # # entropy = np.concatenate(entropy, axis=0)
+                    # # # Maximum entropy is achieved when the distribution is uniform.
+                    # entropy_max = np.log(10)
+                    # entropy = (entropy/entropy_max).sum()
+                    #entropy = entropy_rep(query_features.detach().cpu().numpy())
+                    entropy = scipy.stats.entropy(F.softmax(query_features2, dim=1).detach().cpu().numpy(),axis=1).sum()
+                    print("entropy", entropy)
                     #all_reps = query_features2[0].reshape(-1,1)
-                    #print("shape", all_reps.shape)
                     all_reps = torch.t(query_features2[0].reshape(-1,1)) # start recording representations every batch (this might need to be changed)
                     ## print("same similarity", (torch.t(query_features2[4].reshape(-1,1)) - torch.t(query_features2[260].reshape(-1,1))).pow(2).sum(1).sqrt())
                     ## print("diff similarity", (torch.t(
@@ -358,3 +406,16 @@ class SimCLR(object):
             filename=os.path.join(self.log_dir2, checkpoint_name))
         logging.info(
             f"Stolen model checkpoint and metadata has been saved at {self.log_dir2}.")
+        if watermark_loader is not None:
+            watermark_accuracy = 0
+            for counter, (x_batch, _) in enumerate(watermark_loader):
+                x_batch = torch.cat(x_batch, dim=0)
+                x_batch = x_batch.to(self.args.device)
+                logits = self.watermark_mlp(self.model(x_batch))
+                y_batch = torch.cat([torch.zeros(self.args.batch_size),
+                                     torch.ones(self.args.batch_size)],
+                                    dim=0).long().to(self.args.device)
+                top1 = accuracy(logits, y_batch, topk=(1,))
+                watermark_accuracy += top1[0]
+            watermark_accuracy /= (counter + 1)
+            logging.info(f"Watermark accuracy is {watermark_accuracy}.")

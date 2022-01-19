@@ -349,3 +349,20 @@ def barlow_loss(z1, z2, device):
     off_diag = off_diagonal(c).pow_(2).sum()
     loss = on_diag + 0.0051 * off_diag
     return loss
+
+
+def entropy_rep(signal):
+    '''
+    function returns entropy of a signal
+    signal must be a 2-D numpy array with features on the second dimension.
+    '''
+    ent = 0
+    for i in range(signal.shape[0]):
+        signal2 = signal[i]
+        lensig = signal2.size
+        symset = list(set(signal2))
+        numsym = len(symset)
+        propab = [np.size(signal2[signal2 == i]) / (1.0 * lensig) for i in symset]
+        print("prop", propab)
+        ent += np.sum([p * np.log2(1.0 / p) for p in propab])
+    return ent

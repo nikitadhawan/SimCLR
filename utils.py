@@ -51,3 +51,16 @@ def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False):
         return model
     model.load_state_dict(state_dict, strict=False)
     return model
+
+
+def load_watermark(epochs, dataset, model, arch, loss, device, discard_mlp=False):
+    checkpoint = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+        map_location=device)
+    try:
+        state_dict = checkpoint['watermark_state_dict']
+    except:
+        state_dict = checkpoint['mlp_state_dict']
+
+    model.load_state_dict(state_dict)
+    return model

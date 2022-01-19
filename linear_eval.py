@@ -203,8 +203,8 @@ if args.modeltype == "stolen":
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
-    else:
-        args.arch = "resnet34"
+    # else:
+    #     args.arch = "resnet34"
     log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
     logname = f'testing{args.modeltype}{args.dataset_test}.log'
 if args.clear == "True":

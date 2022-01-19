@@ -2,8 +2,8 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
-from models.resnet_simclr import ResNetSimCLR
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, WatermarkDataset
+from models.resnet_simclr import ResNetSimCLR, WatermarkMLP
 from models.resnet_big import SupConResNet
 from simclr import SimCLR
 
@@ -57,6 +57,8 @@ parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
+parser.add_argument('--watermark', default='False', type=str,
+                    help='Use watermarking when training the model', choices=['True', 'False'])
 
 
 def main():
@@ -84,10 +86,18 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
+    model = ResNetSimCLR(base_model=args.arch, out_dim=512)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                  weight_decay=args.weight_decay)
+
+    if args.watermark == "True":
+        watermark_dataset = WatermarkDataset(args.data).get_dataset(
+            args.dataset, args.n_views)
+        watermark_loader = torch.utils.data.DataLoader(
+            watermark_dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=True, drop_last=True)
+        watermark_mlp = WatermarkMLP(512, 2)
 
     if args.losstype == "supcon":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
@@ -99,9 +109,16 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(model=model, optimizer=optimizer, scheduler=scheduler,
-                        args=args, loss=args.losstype)
-        simclr.train(train_loader)
+        if args.watermark == "True":
+            simclr = SimCLR(model=model, optimizer=optimizer,
+                            scheduler=scheduler,
+                            args=args, loss=args.losstype, watermark_mlp=watermark_mlp)
+            simclr.train(train_loader, watermark_loader)
+        else:
+            simclr = SimCLR(model=model, optimizer=optimizer,
+                            scheduler=scheduler,
+                            args=args, loss=args.losstype)
+            simclr.train(train_loader)
 
 
 if __name__ == "__main__":
