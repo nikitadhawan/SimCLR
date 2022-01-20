@@ -190,19 +190,19 @@ class WatermarkMLP(nn.Module):
     def __init__(self, n_inputs, n_outputs):
         super(WatermarkMLP, self).__init__()
         self.input = nn.Linear(n_inputs, 256)
-        self.hidden1 = nn.Linear(256,256)
-        self.hidden2 = nn.Linear(256, 128)
-        #self.hidden = nn.Linear(256, 128)
+        # self.hidden1 = nn.Linear(256,256)
+        # self.hidden2 = nn.Linear(256, 128)
+        self.hidden = nn.Linear(256, 128)
         self.output = nn.Linear(128, n_outputs)
         self.n_outputs = n_outputs
 
     def forward(self, x):
         x = self.input(x)
         x = F.relu(x)
-        x = self.hidden1(x)
-        x = F.relu(x)
-        x = self.hidden2(x)
-        #x = self.hidden(x)
+        # x = self.hidden1(x)
+        # x = F.relu(x)
+        # x = self.hidden2(x)
+        x = self.hidden(x)
         x = F.relu(x)
         x = self.output(x)
         return x

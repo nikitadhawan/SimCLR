@@ -22,6 +22,13 @@ class ContrastiveLearningDataset:
                                               transforms.ToTensor()])
         return data_transforms
 
+    @staticmethod
+    def get_imagenet_transform(size, s=1):
+        data_transforms = transforms.Compose([
+            transforms.RandomResizedCrop(size),
+            transforms.ToTensor()])
+        return data_transforms
+
 
     def get_dataset(self, name, n_views):
         valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
@@ -42,7 +49,14 @@ class ContrastiveLearningDataset:
                                                               self.get_simclr_pipeline_transform(
                                                                   32),
                                                               n_views),
-                                                          download=True)
+                                                          download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='train',
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform(
+                                      32),
+                                  n_views))
                           }
 
         try:
@@ -123,7 +137,14 @@ class RegularDataset:
                                                             self.get_simclr_pipeline_transform(
                                                                 32),
                                                             n_views),
-                                                        download=True)
+                                                        download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='train',
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_imagenet_transform(
+                                      32),
+                                  n_views))
                           }
 
         try:
@@ -175,25 +196,25 @@ class WatermarkDataset:
 
     @staticmethod
     def get_transform():
-        # data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
-        #                                       transforms.ToTensor()])
-        # data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
-        #                                       transforms.ToTensor()])
-        # return [data_transform1, data_transform2]
+        data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
+                                              transforms.ToTensor()])
+        data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
+                                              transforms.ToTensor()])
+        return [data_transform1, data_transform2]
 
-        data_transform1 = transforms.Compose(
-            [transforms.RandomRotation(degrees=(0, 90)),
-             transforms.ToTensor()])
-        data_transform2 = transforms.Compose(
-            [transforms.RandomRotation(degrees=(90, 180)),
-             transforms.ToTensor()])
-        data_transform3 = transforms.Compose(
-            [transforms.RandomRotation(degrees=(180, 270)),
-             transforms.ToTensor()])
-        data_transform4 = transforms.Compose(
-            [transforms.RandomRotation(degrees=(270, 360)),
-             transforms.ToTensor()])
-        return [data_transform1, data_transform2, data_transform3, data_transform4]
+        # data_transform1 = transforms.Compose(
+        #     [transforms.RandomRotation(degrees=(0, 90)),
+        #      transforms.ToTensor()])
+        # data_transform2 = transforms.Compose(
+        #     [transforms.RandomRotation(degrees=(90, 180)),
+        #      transforms.ToTensor()])
+        # data_transform3 = transforms.Compose(
+        #     [transforms.RandomRotation(degrees=(180, 270)),
+        #      transforms.ToTensor()])
+        # data_transform4 = transforms.Compose(
+        #     [transforms.RandomRotation(degrees=(270, 360)),
+        #      transforms.ToTensor()])
+        # return [data_transform1, data_transform2, data_transform3, data_transform4]
 
     @staticmethod
     def get_imagenet_transform(size, s=1):

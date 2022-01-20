@@ -101,7 +101,7 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 dataset = ContrastiveLearningDataset(args.data)
-train_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
+train_dataset = dataset.get_dataset(args.dataset, args.n_views) # this is the dataset the victim was trained on.
 train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -112,7 +112,7 @@ indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
 test_dataset = torch.utils.data.Subset(test_dataset,
                                            indxs)
 test_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False,
+        test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 criterion2 = nn.CosineSimilarity(dim=1)
 
@@ -197,7 +197,9 @@ victim_model.eval()
 stolen_model.eval()
 random_model.eval()
 
-for images, truelabels in tqdm(train_loader):
+sum1 = 0
+sum2 = 0
+for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
@@ -207,7 +209,11 @@ for images, truelabels in tqdm(train_loader):
     dist2 = (victim_features - random_features).pow(2).sum(1).sqrt()
     #dist = criterion2(victim_features, stolen_features)
     #dist2 = criterion2(victim_features, random_features)
-    print(f"distance between stolen and victim where stolen model used loss {args.losstype}", dist.mean())
-    print("distance between victim and random", dist2.mean())
+    sum1 += dist.mean().item()
+    sum2 += dist2.mean().item()
+    if counter > 10:
+        break
+print(f"distance between stolen and victim where stolen model used loss {args.losstype}", sum1/counter)
+print("distance between victim and random", sum2/counter)
 
 

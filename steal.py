@@ -88,6 +88,8 @@ parser.add_argument('--watermark', default='False', type=str,
                     help='Evaluate with watermark model from victim', choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Use entropy victim model', choices=['True', 'False'])
+parser.add_argument('--force', default='False', type=str,
+                    help='Use cifar10 training set when stealing from cifar10 victim model.', choices=['True', 'False'])
 
 def main():
     args = parser.parse_args()
@@ -132,16 +134,20 @@ def main():
 
     #train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
-    if args.datasetsteal != args.dataset:
+    if args.datasetsteal == "imagenet":
+        query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views) # can change to get_test_dataset
+    elif args.datasetsteal != args.dataset or args.force == "True":
         query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
         indxs = list(range(0, len(query_dataset)))
+        query_dataset = torch.utils.data.Subset(query_dataset,
+                                               indxs)
     else:
         query_dataset = dataset.get_test_dataset(args.datasetsteal,
                                                  args.n_views)
         indxs = list(range(0, len(query_dataset) - 1000))
 
-    query_dataset = torch.utils.data.Subset(query_dataset,
-                                           indxs)  # query set (without last 1000 samples as they are used in the test set)
+        query_dataset = torch.utils.data.Subset(query_dataset,
+                                               indxs)  # query set (without last 1000 samples as they are used in the test set)
     # train_loader = torch.utils.data.DataLoader(
     #     train_dataset, batch_size=args.batch_size, shuffle=False,
     #     num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -193,9 +199,9 @@ def main():
                 watermark_dataset, batch_size=args.batch_size, shuffle=True,
                 num_workers=args.workers, pin_memory=True, drop_last=True)
             if args.stolenhead == "False":
-                watermark_mlp = WatermarkMLP(512,4) # WAS 2
+                watermark_mlp = WatermarkMLP(512,2) # WAS 4
             else:
-                watermark_mlp = WatermarkMLP(128, 4) # WAS 2
+                watermark_mlp = WatermarkMLP(128,2) # WAS 4
             watermark_mlp = load_watermark(args.epochstrain, args.dataset,
                                        watermark_mlp,
                                        args.arch, args.lossvictim,
