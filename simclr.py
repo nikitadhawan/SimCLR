@@ -257,15 +257,6 @@ class SimCLR(object):
                 query_features = self.victim_model(images) # victim model representations
                 if self.args.defence == "True" and self.loss in ["softnn", "infonce"]: # first type of perturbation defence
                     query_features2 = self.victim_head(images)
-                    # entropyrep = self.entropy_model(images)
-                    # prob = F.softmax(entropyrep, dim=1).detach().cpu().numpy()
-                    # entropy = scipy.stats.entropy(prob, axis=1)
-                    # # entropy.append(scipy.stats.entropy(prob, axis=1))
-                    # # entropy = np.concatenate(entropy, axis=0)
-                    # # # Maximum entropy is achieved when the distribution is uniform.
-                    # entropy_max = np.log(10)
-                    # entropy = (entropy/entropy_max).sum()
-                    #entropy = entropy_rep(query_features.detach().cpu().numpy())
                     if self.args.entropy == "True":
                         entropy = scipy.stats.entropy(query_features2.detach().cpu().numpy(),
                                                       axis=1).sum()
@@ -274,34 +265,14 @@ class SimCLR(object):
                     print("entropy", entropy)
                     #all_reps = query_features2[0].reshape(-1,1)
                     all_reps = torch.t(query_features2[0].reshape(-1,1)) # start recording representations every batch (this might need to be changed)
-                    ## print("same similarity", (torch.t(query_features2[4].reshape(-1,1)) - torch.t(query_features2[260].reshape(-1,1))).pow(2).sum(1).sqrt())
-                    ## print("diff similarity", (torch.t(
-                    ##     query_features2[23].reshape(-1, 1)) - torch.t(
-                    ##     query_features2[257].reshape(-1, 1))).pow(2).sum(
-                    ##     1).sqrt())
-                    # half1 = 0
-                    # half2 = 0
                     for i in range(1, query_features.shape[0]):
                         #print("shape", all_reps.shape)
                         sims = self.criterion2(query_features2[i].expand(all_reps.shape[0], all_reps.shape[1]), all_reps)
                         sims = (sims>0.5).to(torch.float32) # with cosine similarity
-                        #print("one", query_features[i].expand(all_reps.shape[0], all_reps.shape[1]))
-                        #print("two", all_reps)
-                        #sims = (query_features2[i].expand(all_reps.shape[0], all_reps.shape[1])-all_reps).pow(2).sum(1).sqrt() # l2 norm with all current samples
-                        #sims = (query_features[i].expand(all_reps.shape[0],all_reps.shape[1]) - all_reps).sum(1) # l1 norm
-                        #print("sims", sims.mean())
-                        #sims = (sims < 14).to(torch.float32)
-                        #print("sum", sims.sum())
                         if sims.sum().item() > 0 and self.args.sigma > 0:
-                            # if i < 256:
-                            #     half1 += 1
-                            # else:
-                            #     half2 += 1
-                            #query_features[i] += torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device)
                             query_features[i] = torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device) # instead of adding, completely change the representation
                         all_reps = torch.cat([all_reps, torch.t(query_features2[i].reshape(-1,1))], dim=0)
-                    # tp.append(half2/256)
-                    # fp.append(half1/256)
+
                 elif self.args.defence == "True": # Second type of perturbation defence
                     #query_features += 0.1 * torch.empty(query_features.size()).normal_(mean=query_features.mean().item(), std=query_features.std().item()).to(self.args.device) # add random noise to embeddings
                     if self.args.sigma > 0:
@@ -340,32 +311,12 @@ class SimCLR(object):
                     p1, p2, _, _ = self.model(x1, x2)
                     y1 = self.victim_model(x1).detach()
                     y2 = self.victim_model(x2).detach() # raw representations from victim
-                    # criterion2 = torch.nn.CosineSimilarity(dim=1)
-                    # print(criterion2(y1, y2))
-                    # print("similarity between same examples",criterion2(y1,y2).mean())
-                    # print("similarity between different examples", criterion2(y2[:int(len(y1)/2)], y2[int(len(y1)/2):]).mean())
-                    # print("l1 distance between same examples",
-                    #       (y1 - y2).sum(1).mean()) # does not work very well
-                    # print("l2 distance between same examples", (y1-y2).pow(2).sum(1).sqrt().mean())
-                    # print("under threshold",((y1-y2).pow(2).sum(1).sqrt() < 20).to(torch.float32).sum() / (y1-y2).pow(2).sum(1).sqrt().shape[0] )
-                    # scores = []
-                    # y = torch.cat([y1, y2], dim=1)
-                    # for i in range(len(y)):
-                    #     for j in range(len(y)):
-                    #         if i != j and abs(i-j) != len(y1): # different samples
-                    #             sim = (y[i]-y[j]).pow(2).sum().sqrt()
-                    #             #print("sim", sim)
-                    #             scores.append(sim.item())
-                    # #print("l2 distance between different examples", (y1[:int(len(y1)/2)] - y1[int(len(y1)/2):]).pow(2).sum(1).sqrt().mean()) # this is between specific pairs.
-                    # scores = np.array(scores)
-                    # print("l2 distance between different examples", scores)
-                    # print("under threshold", (scores<20).astype(int).sum() / len(scores))
                     z1 = self.model.encoder.fc(y1)
                     z2 = self.model.encoder.fc(y2) # pass representations through attacker's encoder. This gives a better performance.
                     loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
                                                                   z1).mean()) * 0.5
                     # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2 # same as above
-                    #loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
+                    #loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean()
                 elif self.loss == "barlow":
                     x1 = images[:int(len(images) / 2)]
                     x2 = images[int(len(images) / 2):]
@@ -393,9 +344,7 @@ class SimCLR(object):
             # warmup for the first 10 epochs
             if epoch_counter >= 10:
                 self.scheduler.step()
-            # if self.args.defence == "True":
-            #     print(f"Mean true positive: {np.mean(tp)}, std: {np.std(tp)}")
-            #     print(f"Mean false positive: {np.mean(fp)}, std: {np.std(fp)}")
+
 
             logging.debug(
                 f"Epoch: {epoch_counter}\tLoss: {loss}\t")

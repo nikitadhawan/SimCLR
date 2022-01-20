@@ -153,11 +153,11 @@ def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     return train_loader, test_loader
 
 def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
+    train_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=True, download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
+    test_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=download,
                                   transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,
@@ -167,11 +167,11 @@ def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size
     return train_loader, test_loader
 
 def get_svhn_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
+    train_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test', download=download,
+    test_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='test', download=download,
                                   transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,

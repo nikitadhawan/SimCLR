@@ -6,13 +6,14 @@ from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, Wa
 from models.resnet_simclr import ResNetSimCLR, WatermarkMLP
 from models.resnet_big import SupConResNet
 from simclr import SimCLR
+import os
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
                      and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
@@ -99,7 +100,7 @@ def main():
         watermark_loader = torch.utils.data.DataLoader(
             watermark_dataset, batch_size=args.batch_size, shuffle=True,
             num_workers=args.workers, pin_memory=True, drop_last=True)
-        watermark_mlp = WatermarkMLP(512, 4) # was 2
+        watermark_mlp = WatermarkMLP(512, 2)
 
     if args.losstype == "supcon":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,

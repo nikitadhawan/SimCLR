@@ -1,4 +1,4 @@
-# Querying and training process for a legitimate user.
+# Querying and training process for a legitimate user i.e. only with a two layer network.
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_eu
 
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])

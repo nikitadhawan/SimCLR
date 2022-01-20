@@ -14,7 +14,7 @@ model_names = sorted(name for name in models.__dict__
                      and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
@@ -148,9 +148,7 @@ def main():
 
         query_dataset = torch.utils.data.Subset(query_dataset,
                                                indxs)  # query set (without last 1000 samples as they are used in the test set)
-    # train_loader = torch.utils.data.DataLoader(
-    #     train_dataset, batch_size=args.batch_size, shuffle=False,
-    #     num_workers=args.workers, pin_memory=True, drop_last=True)
+
 
     query_loader = torch.utils.data.DataLoader(
         query_dataset, batch_size=args.batch_size, shuffle=False,
@@ -188,10 +186,7 @@ def main():
                                        victim_head,
                                        args.arch, args.lossvictim,
                                        device=args.device, entropy=args.entropy)
-            # model to be used for entropy calculation (assumes specific downstream task being used)
-            entropy_model = models.resnet50(pretrained=False,
-                                                num_classes=10).to(args.device)
-            entropy_model.load_state_dict(torch.load(f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.datasetsteal}.pth.tar"))
+
         if args.watermark == "True":
             watermark_dataset = WatermarkDataset(args.data).get_dataset(
                 args.dataset, args.n_views)
@@ -199,9 +194,9 @@ def main():
                 watermark_dataset, batch_size=args.batch_size, shuffle=True,
                 num_workers=args.workers, pin_memory=True, drop_last=True)
             if args.stolenhead == "False":
-                watermark_mlp = WatermarkMLP(512,2) # WAS 4
+                watermark_mlp = WatermarkMLP(512,2)
             else:
-                watermark_mlp = WatermarkMLP(128,2) # WAS 4
+                watermark_mlp = WatermarkMLP(128,2)
             watermark_mlp = load_watermark(args.epochstrain, args.dataset,
                                        watermark_mlp,
                                        args.arch, args.lossvictim,
@@ -227,12 +222,12 @@ def main():
         query_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        if args.defence == "True":
-            simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
-                            model=model, optimizer=optimizer, scheduler=scheduler,
-                            args=args, logdir=args.logdir, loss=args.losstype)
-            simclr.steal(query_loader, args.num_queries)
-        elif args.watermark == "True":
+        # if args.defence == "True":
+        #     simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
+        #                     model=model, optimizer=optimizer, scheduler=scheduler,
+        #                     args=args, logdir=args.logdir, loss=args.losstype)
+        #     simclr.steal(query_loader, args.num_queries)
+        if args.watermark == "True":
             simclr = SimCLR(stealing=True, victim_model=victim_model,
                             watermark_mlp=watermark_mlp,
                             model=model, optimizer=optimizer,
