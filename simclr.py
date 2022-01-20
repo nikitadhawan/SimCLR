@@ -157,7 +157,7 @@ class SimCLR(object):
                 n_iter += 1
             if watermark_loader is not None:
                 watermark_accuracy = 0
-                for images, _ in tqdm(watermark_loader):
+                for counter, (images, _) in enumerate(tqdm(watermark_loader)):
                     images = torch.cat(images, dim=0)
 
                     images = images.to(self.args.device)
@@ -175,8 +175,11 @@ class SimCLR(object):
                         x = self.model.backbone.avgpool(x)
                         features = torch.flatten(x, 1)
                         logits = self.watermark_mlp(features)
+                        # labels = torch.cat([torch.zeros(self.args.batch_size),
+                        #                     torch.ones(self.args.batch_size)],
+                        #                    dim=0).long().to(self.args.device)
                         labels = torch.cat([torch.zeros(self.args.batch_size),
-                                            torch.ones(self.args.batch_size)],
+                                            torch.ones(self.args.batch_size), 2*torch.ones(self.args.batch_size), 3*torch.ones(self.args.batch_size)],
                                            dim=0).long().to(self.args.device)
                         loss = self.criterion(logits, labels)
                         w_top1 = accuracy(logits, labels, topk=(1,))
@@ -188,6 +191,8 @@ class SimCLR(object):
 
                     scaler.step(self.optimizer)
                     scaler.update()
+                watermark_accuracy /= (counter + 1)
+                logging.debug(f"Epoch: {epoch_counter}\t Watermark Acc: {watermark_accuracy}")
 
             # warmup for the first 10 epochs
             if epoch_counter >= 10:
@@ -415,10 +420,15 @@ class SimCLR(object):
                 x_batch = torch.cat(x_batch, dim=0)
                 x_batch = x_batch.to(self.args.device)
                 logits = self.watermark_mlp(self.model(x_batch))
+                # y_batch = torch.cat([torch.zeros(self.args.batch_size),
+                #                      torch.ones(self.args.batch_size)],dim=0).long().to(self.args.device)
                 y_batch = torch.cat([torch.zeros(self.args.batch_size),
-                                     torch.ones(self.args.batch_size)],
+                                     torch.ones(self.args.batch_size),
+                                     2*torch.ones(self.args.batch_size),
+                                     3*torch.ones(self.args.batch_size)],
                                     dim=0).long().to(self.args.device)
                 top1 = accuracy(logits, y_batch, topk=(1,))
                 watermark_accuracy += top1[0]
             watermark_accuracy /= (counter + 1)
+            print(f"Watermark accuracy is {watermark_accuracy.item()}.")
             logging.info(f"Watermark accuracy is {watermark_accuracy.item()}.")

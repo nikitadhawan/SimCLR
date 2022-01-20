@@ -175,11 +175,25 @@ class WatermarkDataset:
 
     @staticmethod
     def get_transform():
-        data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
-                                              transforms.ToTensor()])
-        data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
-                                              transforms.ToTensor()])
-        return [data_transform1, data_transform2]
+        # data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
+        #                                       transforms.ToTensor()])
+        # data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
+        #                                       transforms.ToTensor()])
+        # return [data_transform1, data_transform2]
+
+        data_transform1 = transforms.Compose(
+            [transforms.RandomRotation(degrees=(0, 90)),
+             transforms.ToTensor()])
+        data_transform2 = transforms.Compose(
+            [transforms.RandomRotation(degrees=(90, 180)),
+             transforms.ToTensor()])
+        data_transform3 = transforms.Compose(
+            [transforms.RandomRotation(degrees=(180, 270)),
+             transforms.ToTensor()])
+        data_transform4 = transforms.Compose(
+            [transforms.RandomRotation(degrees=(270, 360)),
+             transforms.ToTensor()])
+        return [data_transform1, data_transform2, data_transform3, data_transform4]
 
     @staticmethod
     def get_imagenet_transform(size, s=1):

@@ -4,7 +4,7 @@ import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset
-from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
+from models.resnet_simclr import ResNetSimCLR, ResNetSimCLRV2, SimSiam, WatermarkMLP
 from simclr import SimCLR
 from utils import load_victim, load_watermark
 import os
@@ -168,10 +168,16 @@ def main():
                                        args.arch, args.lossvictim,
                                        device=args.device)
         if args.defence == "True": # Use the model head as part of the defence.
-            victim_head = ResNetSimCLRV2(base_model=args.arch,
-                                          out_dim=args.out_dim,
-                                          loss=args.lossvictim,
-                                          include_mlp=True).to(args.device)
+            if args.entropy == "True":
+                victim_head = ResNetSimCLR(base_model=args.arch,
+                                             out_dim=args.out_dim,
+                                             entropy=args.entropy).to(args.device)
+            else:
+                victim_head = ResNetSimCLRV2(base_model=args.arch,
+                                              out_dim=args.out_dim,
+                                              loss=args.lossvictim,
+                                              include_mlp=True).to(args.device)
+
             victim_head = load_victim(args.epochstrain, args.dataset,
                                        victim_head,
                                        args.arch, args.lossvictim,
@@ -187,9 +193,9 @@ def main():
                 watermark_dataset, batch_size=args.batch_size, shuffle=True,
                 num_workers=args.workers, pin_memory=True, drop_last=True)
             if args.stolenhead == "False":
-                watermark_mlp = WatermarkMLP(512,2)
+                watermark_mlp = WatermarkMLP(512,4) # WAS 2
             else:
-                watermark_mlp = WatermarkMLP(128, 2)
+                watermark_mlp = WatermarkMLP(128, 4) # WAS 2
             watermark_mlp = load_watermark(args.epochstrain, args.dataset,
                                        watermark_mlp,
                                        args.arch, args.lossvictim,

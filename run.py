@@ -99,7 +99,7 @@ def main():
         watermark_loader = torch.utils.data.DataLoader(
             watermark_dataset, batch_size=args.batch_size, shuffle=True,
             num_workers=args.workers, pin_memory=True, drop_last=True)
-        watermark_mlp = WatermarkMLP(512, 2)
+        watermark_mlp = WatermarkMLP(512, 4) # was 2
 
     if args.losstype == "supcon":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
