@@ -56,7 +56,7 @@ parser.add_argument('--n-views', default=2, type=int, metavar='N',
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
-parser.add_argument('--clear', default='True', type=str,
+parser.add_argument('--clear', default='False', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
                     help='Use watermarking when training the model', choices=['True', 'False'])

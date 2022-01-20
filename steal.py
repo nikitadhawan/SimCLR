@@ -82,7 +82,7 @@ parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
 parser.add_argument('--mu', default=5, type=float,
                     help='mean noise used for perturbations')
-parser.add_argument('--clear', default='True', type=str,
+parser.add_argument('--clear', default='False', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
                     help='Evaluate with watermark model from victim', choices=['True', 'False'])

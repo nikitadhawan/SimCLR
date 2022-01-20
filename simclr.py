@@ -37,18 +37,18 @@ class SimCLR(object):
         logname = 'training.log'
         if self.stealing:
             logname = f'training{self.args.datasetsteal}{self.args.num_queries}.log'
-        if self.args.clear == "True":
-            if os.path.exists(os.path.join(self.log_dir2, logname)):
+        if os.path.exists(os.path.join(self.log_dir2, logname)):
+            if self.args.clear == "True":
                 os.remove(os.path.join(self.log_dir2, logname))
-            else:
+        else:
+            try:
                 try:
-                    try:
-                        os.mkdir(f"/checkpoint/{os.getenv('USER')}/SimCLR")
-                        os.mkdir(self.log_dir2)
-                    except:
-                        os.mkdir(self.log_dir2)
+                    os.mkdir(f"/checkpoint/{os.getenv('USER')}/SimCLR")
+                    os.mkdir(self.log_dir2)
                 except:
-                    pass #print(f"Error creating directory at {self.log_dir2}")
+                    os.mkdir(self.log_dir2)
+            except:
+                pass #print(f"Error creating directory at {self.log_dir2}")
         logging.basicConfig(
             filename=os.path.join(self.log_dir2, logname),
             level=logging.DEBUG)
