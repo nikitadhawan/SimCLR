@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 
+import sklearn.metrics
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,7 +58,7 @@ class SimCLR(object):
             if self.args.defence == "True":
                 self.victim_head = victim_head.to(self.args.device)
                 self.entropy_model = entropy_model.to(self.args.device)
-        if self.loss == "infonce":
+        if self.loss in ["infonce", "infonce2"]:
             self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
         elif self.loss == "softce":
             self.criterion = soft_cross_entropy
@@ -125,6 +126,7 @@ class SimCLR(object):
         logging.info(f"Args: {self.args}")
 
         for epoch_counter in range(self.args.epochs):
+            total_queries = 0
             for images, truelabels in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
 
@@ -153,7 +155,10 @@ class SimCLR(object):
 
                 scaler.step(self.optimizer)
                 scaler.update()
-
+                if self.args.losstype == "infonce2": # to test other number of training samples
+                    total_queries += len(images)
+                    if total_queries >= self.args.num_queries:
+                        break
                 n_iter += 1
             if watermark_loader is not None:
                 watermark_accuracy = 0
@@ -251,6 +256,9 @@ class SimCLR(object):
             all_reps = None
             # tp = []
             # fp = []
+            y_true = []
+            y_pred = []
+            y_pred_raw = []
             for images, truelabels in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
@@ -271,7 +279,7 @@ class SimCLR(object):
                                                       axis=1).sum()
                     else:
                         entropy = scipy.stats.entropy(F.softmax(query_features2, dim=1).detach().cpu().numpy(),axis=1).sum()
-                    print("entropy", entropy)
+                    #print("entropy", entropy)
                     #all_reps = query_features2[0].reshape(-1,1)
                     all_reps = torch.t(query_features2[0].reshape(-1,1)) # start recording representations every batch (this might need to be changed)
                     ## print("same similarity", (torch.t(query_features2[4].reshape(-1,1)) - torch.t(query_features2[260].reshape(-1,1))).pow(2).sum(1).sqrt())
@@ -283,8 +291,47 @@ class SimCLR(object):
                     # half2 = 0
                     for i in range(1, query_features.shape[0]):
                         #print("shape", all_reps.shape)
+                        # Cosine similarity
                         sims = self.criterion2(query_features2[i].expand(all_reps.shape[0], all_reps.shape[1]), all_reps)
-                        sims = (sims>0.5).to(torch.float32) # with cosine similarity
+                        sims = ((sims+1)/2)
+                        ###
+                        # L2:
+                        # sims = (F.normalize(query_features2[i].expand(all_reps.shape[0],
+                        #                                   all_reps.shape[
+                        #                                       1])) - F.normalize(all_reps)).pow(
+                        #     2).sum(1).sqrt()  # l2 norm
+                        # sims = sims/2 # normalize
+                        # sims = torch.abs(sims-1)
+                        ###
+                        # L1:
+                        # sims = (F.normalize(query_features2[i].expand(all_reps.shape[0],
+                        #                                   all_reps.shape[
+                        #                                       1])) - F.normalize(all_reps)).sum(1) # l2 norm
+                        # print("sims", sims)
+                        #sims = (sims>0.5).to(torch.float32) # with cosine similarity
+                        # new approach for f1 scores
+
+                        maxval = sims.max()
+                        maxpos = torch.argmax(sims)
+                        if i < query_features.shape[0]/2:
+                            y_true.append(0)
+                        else:
+                            # print("one", i - query_features.shape[0]/2)
+                            # print("two", maxpos)
+                            if i - query_features.shape[0]/2 == maxpos.item():
+                                y_true.append(1)
+                            else:
+                                y_true.append(0)
+                        y_pred_raw.append(maxval.item())
+                        if maxval.item() > 0.8: # 0.8
+                            y_pred.append(1)
+                            query_features[i] = torch.empty(
+                                query_features[i].size()).normal_(mean=1000,
+                                                                  std=self.args.sigma).to(
+                                self.args.device)  # instead of adding, completely change the representation
+                        else:
+                            y_pred.append(0)
+                        #print("maxpos", maxpos)
                         #print("one", query_features[i].expand(all_reps.shape[0], all_reps.shape[1]))
                         #print("two", all_reps)
                         #sims = (query_features2[i].expand(all_reps.shape[0], all_reps.shape[1])-all_reps).pow(2).sum(1).sqrt() # l2 norm with all current samples
@@ -292,13 +339,13 @@ class SimCLR(object):
                         #print("sims", sims.mean())
                         #sims = (sims < 14).to(torch.float32)
                         #print("sum", sims.sum())
-                        if sims.sum().item() > 0 and self.args.sigma > 0:
-                            # if i < 256:
-                            #     half1 += 1
-                            # else:
-                            #     half2 += 1
-                            #query_features[i] += torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device)
-                            query_features[i] = torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device) # instead of adding, completely change the representation
+                        # if sims.sum().item() > 0 and self.args.sigma > 0:
+                        #     # if i < 256:
+                        #     #     half1 += 1
+                        #     # else:
+                        #     #     half2 += 1
+                        #     #query_features[i] += torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device)
+                        #     query_features[i] = torch.empty(query_features[i].size()).normal_(mean=1000,std=self.args.sigma).to(self.args.device) # instead of adding, completely change the representation
                         all_reps = torch.cat([all_reps, torch.t(query_features2[i].reshape(-1,1))], dim=0)
                     # tp.append(half2/256)
                     # fp.append(half1/256)
@@ -393,9 +440,14 @@ class SimCLR(object):
             # warmup for the first 10 epochs
             if epoch_counter >= 10:
                 self.scheduler.step()
-            # if self.args.defence == "True":
-            #     print(f"Mean true positive: {np.mean(tp)}, std: {np.std(tp)}")
-            #     print(f"Mean false positive: {np.mean(fp)}, std: {np.std(fp)}")
+            if self.args.defence == "True":
+                f1 = sklearn.metrics.f1_score(np.array(y_true),
+                                              np.array(y_pred))
+                print("f1 score", f1)
+                fpr, tpr, thresholds = sklearn.metrics.roc_curve(np.array(y_true), np.array(y_pred_raw), pos_label=1)
+                print("auc",  sklearn.metrics.auc(fpr, tpr))
+                # print(f"Mean true positive: {np.mean(tp)}, std: {np.std(tp)}")
+                # print(f"Mean false positive: {np.mean(fp)}, std: {np.std(fp)}")
 
             logging.debug(
                 f"Epoch: {epoch_counter}\tLoss: {loss}\t")

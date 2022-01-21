@@ -12,6 +12,8 @@ from utils import load_victim, load_watermark, accuracy
 import os
 from torchvision import models
 from tqdm import tqdm
+from statistical_tests.t_test import ttest
+import numpy as np
 
 
 model_names = sorted(name for name in models.__dict__
@@ -140,7 +142,6 @@ else:
 
 
 # Load stolen copy
-
 if args.dataset == "imagenet":
     stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=512, loss=None,
                                   include_mlp=False).to(device)
@@ -182,12 +183,12 @@ if args.dataset == "imagenet":
 
     random_model.load_state_dict(new_state_dict, strict=False)
 else:
-    loss = "mse"
-    checkpoint2 = torch.load(
-                f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18{loss}STEAL/stolen_checkpoint_9000_{loss}_cifar10.pth.tar",
-                map_location=device)
-
-    random_dict = checkpoint2['state_dict']
+    # loss = "infonce"
+    # checkpoint2 = torch.load(
+    #             f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18{loss}TRAIN/cifar10_checkpoint_9000_{loss}_cifar10.pth.tar",
+    #             map_location=device)
+    #
+    # random_dict = checkpoint2['state_dict']
     random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
     #random_model.load_state_dict(random_dict)
     random_model = load_victim(50, "cifar10", random_model,
@@ -197,8 +198,8 @@ victim_model.eval()
 stolen_model.eval()
 random_model.eval()
 
-sum1 = 0
-sum2 = 0
+randomvic = []
+stolenvic = []
 for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     images = torch.cat(images, dim=0)
     images = images.to(device)
@@ -209,11 +210,12 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     dist2 = (victim_features - random_features).pow(2).sum(1).sqrt()
     #dist = criterion2(victim_features, stolen_features)
     #dist2 = criterion2(victim_features, random_features)
-    sum1 += dist.mean().item()
-    sum2 += dist2.mean().item()
-    if counter > 10:
-        break
-print(f"distance between stolen and victim where stolen model used loss {args.losstype}", sum1/counter)
-print("distance between victim and random", sum2/counter)
+    stolenvic.append(dist.mean().item())
+    randomvic.append(dist2.mean().item())
+
+print(f"mean distance between stolen and victim where stolen model used loss {args.losstype}", np.mean(stolenvic))
+print("mean distance between victim and random", np.mean(randomvic))
+tval, pval = ttest(stolenvic, randomvic, alternative="greater")
+print('tval 0 hypothesis a <= b: ', tval, ' pval: ', pval)
 
 
