@@ -226,14 +226,22 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     #dist2 = criterion2(victim_features, random_features)
     #stolenvic.append(dist.mean().item())
     #randomvic.append(dist2.mean().item())
+    if counter >= 100:
+        break
 
-tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
-print('tval 0 hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
+# tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
+# print('Null hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
+tval, pval = ttest(randomvic, randomvic2, alternative="greater")
+print('Null hypothesis D = dist(vic, M1) <= E = dist(vic, M2): ', ' pval: ', pval)
+tval, pval = ttest(randomvic2, randomvic, alternative="greater")
+print('Null hypothesis E = dist(vic, M2) <= D = dist(vic, M1): ', ' pval: ', pval)
 
 
 print(f"mean distance between stolen and victim where stolen model used loss {args.losstype}", np.mean(stolenvic))
 print("mean distance between victim and random", np.mean(randomvic))
-tval, pval = ttest(stolenvic, randomvic, alternative="greater")
-print('tval 0 hypothesis dist(vic, M3) <= dist(vic, M1): ', tval, ' pval: ', pval)
+# tval, pval = ttest(stolenvic, randomvic, alternative="greater")
+# print('tval 0 hypothesis dist(vic, M3) <= dist(vic, M1): ', tval, ' pval: ', pval)
+tval, pval = ttest(randomvic, stolenvic, alternative="greater")
+print('Null hypothesis dist(vic, M1) <= dist(vic, stolen): ', ' pval: ', pval)
 
 
