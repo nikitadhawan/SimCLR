@@ -63,7 +63,7 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations.
+parser.add_argument('--n-views', default=1, type=int, metavar='N',  # use 2 to use multiple augmentations.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--logdir', default='test', type=str,
