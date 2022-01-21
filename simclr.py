@@ -325,10 +325,11 @@ class SimCLR(object):
                         y_pred_raw.append(maxval.item())
                         if maxval.item() > 0.8: # 0.8
                             y_pred.append(1)
-                            query_features[i] = torch.empty(
-                                query_features[i].size()).normal_(mean=1000,
-                                                                  std=self.args.sigma).to(
-                                self.args.device)  # instead of adding, completely change the representation
+                            if self.args.sigma > 0:
+                                query_features[i] = torch.empty(
+                                    query_features[i].size()).normal_(mean=1000,
+                                                                      std=self.args.sigma).to(
+                                    self.args.device)  # instead of adding, completely change the representation
                         else:
                             y_pred.append(0)
                         #print("maxpos", maxpos)

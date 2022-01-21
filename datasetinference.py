@@ -194,11 +194,20 @@ else:
     random_model = load_victim(50, "cifar10", random_model,
                                    "resnet18", "infonce",
                                    device=device, discard_mlp=True)
+
+    random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
+                                  include_mlp=False).to(
+        device)
+    random_model2 = load_victim(100, "cifar10", random_model2,
+                               "resnet34", "infonce2",
+                               device=device, discard_mlp=True)
 victim_model.eval()
 stolen_model.eval()
 random_model.eval()
+random_model2.eval()
 
 randomvic = []
+randomvic2 = []
 stolenvic = []
 for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     images = torch.cat(images, dim=0)
@@ -206,16 +215,25 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
     victim_features = victim_model(images)
     stolen_features = stolen_model(images)
     random_features = random_model(images)
+    random_features2 = random_model2(images)
     dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
     dist2 = (victim_features - random_features).pow(2).sum(1).sqrt()
+    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+    randomvic.extend(dist2.tolist())
+    randomvic2.extend(dist3.tolist())
+    stolenvic.extend(dist.tolist())
     #dist = criterion2(victim_features, stolen_features)
     #dist2 = criterion2(victim_features, random_features)
-    stolenvic.append(dist.mean().item())
-    randomvic.append(dist2.mean().item())
+    #stolenvic.append(dist.mean().item())
+    #randomvic.append(dist2.mean().item())
+
+tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
+print('tval 0 hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
+
 
 print(f"mean distance between stolen and victim where stolen model used loss {args.losstype}", np.mean(stolenvic))
 print("mean distance between victim and random", np.mean(randomvic))
 tval, pval = ttest(stolenvic, randomvic, alternative="greater")
-print('tval 0 hypothesis a <= b: ', tval, ' pval: ', pval)
+print('tval 0 hypothesis dist(vic, M3) <= dist(vic, M1): ', tval, ' pval: ', pval)
 
 

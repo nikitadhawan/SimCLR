@@ -8,6 +8,7 @@ import torchvision
 import argparse
 from torch.utils.data import DataLoader
 from models.resnet_simclr import ResNetSimCLR
+from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
@@ -71,6 +72,23 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
     if dataset == "imagenet":
         model = torchvision.models.resnet50(pretrained=True).to(device)
         model.fc = torch.nn.Linear(2048, 10).to(device)
+        # class ResNet50(torch.nn.Module):
+        #     def __init__(self, pretrained, num_classes=10):
+        #         super(ResNet50, self).__init__()
+        #         self.pretrained = pretrained
+        #         self.fc = torch.nn.Sequential(torch.nn.Linear(512 * 4 * 1, num_classes))
+        #
+        #     def forward(self, x):
+        #         x = self.pretrained(x)
+        #         x = self.fc(x)
+        #         return x
+        #
+        # model = resnet50rep().to(device)
+        # checkpoint = torch.load(
+        #         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+        # state_dict = checkpoint['state_dict']
+        # model.load_state_dict(state_dict, strict=False)
+        # model = ResNet50(pretrained=model).to(device)
         return model
     if watermark == "True":
         checkpoint = torch.load(
@@ -252,15 +270,23 @@ elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 
 # freeze all layers but the last fc (can try by training all layers)
+
 for name, param in model.named_parameters():
-    if name not in ['fc.weight', 'fc.bias']:
+    if name not in ['fc.weight', 'fc.bias'] and name not in ['fc.0.weight', 'fc.0.bias'] :
         param.requires_grad = False
+
+# params_to_update = []
+# #https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
+# for name, param in model.named_parameters():
+#     if param.requires_grad == True:
+#         params_to_update.append(param)
+
 
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
 if args.modeltype == "victim":
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008) # params_to_update
     criterion = torch.nn.CrossEntropyLoss().to(device)
 else:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,

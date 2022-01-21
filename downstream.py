@@ -72,17 +72,17 @@ parser.add_argument('--losstype', default='infonce', type=str,
 args = parser.parse_args()
 
 
-# class ResNet50(nn.Module):
-#     def __init__(self, pretrained, num_classes=10):
-#         super(ResNet50, self).__init__()
-#         self.pretrained = pretrained
-#         self.fc = nn.Sequential(nn.Linear(512 * 4 * 1, 512*4), nn.ReLU(), nn.Linear(512 * 4* 1, num_classes))
-#
-#     def forward(self, x):
-#         x = self.pretrained(x)
-#         x = self.fc(x)
-#         return x
-#
+class ResNet50(nn.Module):
+    def __init__(self, pretrained, num_classes=10):
+        super(ResNet50, self).__init__()
+        self.pretrained = pretrained
+        self.fc = nn.Sequential(nn.Linear(512 * 4 * 1, 512*4), nn.ReLU(), nn.Linear(512 * 4* 1, num_classes))
+
+    def forward(self, x):
+        x = self.pretrained(x)
+        x = self.fc(x)
+        return x
+
 # class ResNet50v2(nn.Module):
 #     def __init__(self, pretrained, num_classes=10):
 #         super(ResNet50v2, self).__init__()
@@ -92,7 +92,7 @@ args = parser.parse_args()
 #         x = self.pretrained(x)
 #         return x
 #
-# class ResNet50v3(nn.Module):
+# class ResNet50v3(nn.Module): # For SimSiam
 #     # with SimSiam
 #     def __init__(self, pretrained, num_classes=10):
 #         super(ResNet50v3, self).__init__()
@@ -107,12 +107,18 @@ args = parser.parse_args()
 
 
 #victim_model = resnet50x1().to(device)
+#####
 # victim_model = resnet50rep().to(device)
+# checkpoint = torch.load(
+#         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+# state_dict = checkpoint['state_dict']
+# victim_model.load_state_dict(state_dict, strict=False)
+# victim_model = ResNet50(pretrained=victim_model).to(device)
+#####
 #victim_model = resnet50rep2().to(device)
 # victim_model = SimSiam(models.__dict__["resnet50"], args.out_dim, args.out_dim).to(device)
 # victim_model.encoder.fc = nn.Identity()
-# checkpoint = torch.load(
-#         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+
 # checkpoint = torch.load(
 #         f'/ssd003/home/akaleem/SimCLR/models/resnet50SimSiam.pth.tar', map_location=device)
 # state_dict = checkpoint['state_dict']
@@ -129,8 +135,12 @@ args = parser.parse_args()
 # else:
 #     victim_model = ResNet50v2(pretrained=victim_model).to(device)
 #victim_model = ResNet50v3(pretrained=victim_model).to(device)
+
+###
 victim_model = models.resnet50(pretrained=True).to(device) # pretrained torch model on imagenet
 victim_model.fc = nn.Sequential(nn.Linear(2048, 10)).to(device)
+###
+
 print("Loaded victim")
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=64):
