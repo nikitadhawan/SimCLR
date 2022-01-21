@@ -8,6 +8,7 @@ import torchvision
 import argparse
 from torch.utils.data import DataLoader
 from models.resnet_simclr import ResNetSimCLR
+from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
@@ -69,8 +70,28 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
 
     print("Loading victim model: ")
     if dataset == "imagenet":
-        model = torchvision.models.resnet50(pretrained=True).to(device)
-        model.fc = torch.nn.Linear(2048, 10).to(device)
+        # model = torchvision.models.resnet50(pretrained=True).to(device) # Pytorch pretrained resnet
+        # model.fc = torch.nn.Linear(2048, 10).to(device)
+
+        class ResNet50(torch.nn.Module):   # model from SimCLR
+            def __init__(self, pretrained, num_classes=10):
+                super(ResNet50, self).__init__()
+                self.pretrained = pretrained
+                self.fc = torch.nn.Sequential(torch.nn.Linear(512 * 4 * 1, num_classes))
+
+            def forward(self, x):
+                x = self.pretrained(x)
+                x = self.fc(x)
+                return x
+
+        model = resnet50rep().to(device)
+        checkpoint = torch.load(   # change path
+                f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+        state_dict = checkpoint['state_dict']
+        model.load_state_dict(state_dict, strict=False)
+        model = ResNet50(pretrained=model).to(device)
+
+
         return model
     if watermark == "True":
         checkpoint = torch.load(
@@ -253,7 +274,7 @@ elif args.dataset_test == "svhn":
 
 # freeze all layers but the last fc (can try by training all layers)
 for name, param in model.named_parameters():
-    if name not in ['fc.weight', 'fc.bias']:
+    if name not in ['fc.weight', 'fc.bias', 'fc.0.weight', 'fc.0.bias']: # the imagenet model has fc.0 for the last layer
         param.requires_grad = False
 
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
