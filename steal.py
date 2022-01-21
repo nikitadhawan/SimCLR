@@ -104,7 +104,7 @@ def main():
     if args.losstype in  ["infonce", "softnn", "supcon", "barlow"]:
         args.batch_size = 256
         args.weight_decay = 1e-4
-        args.n_views = 2
+        #args.n_views = 2
     if args.losstype == "infonce":
         args.lr = 0.0003
     if args.losstype == "supcon":
