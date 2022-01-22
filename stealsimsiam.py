@@ -29,14 +29,15 @@ import torchvision.models as models
 from torch.utils.data import  DataLoader
 import logging
 from models.resnet_simclr import ResNetSimCLRV2
+from utils import print_args
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-# parser.add_argument('data', metavar='DIR',
-#                     help='path to dataset')
+parser.add_argument('--data', metavar='DIR',
+                    help='path to imagenet dataset')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     choices=model_names,
                     help='model architecture: ' +
@@ -44,7 +45,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                         ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=30, type=int, metavar='N',
+parser.add_argument('--epochs', default=50, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -96,18 +97,20 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
 parser.add_argument('--epochssteal', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--num_queries', default=10000, type=int, metavar='N',
-                    help='number of queries stolen model was trained with')
-parser.add_argument('--losstype', default='infonce', type=str,
+                    help='number of queries to steal with with')
+parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use.')
 parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
 
-
+prefix = ''
 best_acc1 = 0
 
 
 def main():
     args = parser.parse_args()
+
+    print_args(args=args)
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -127,7 +130,6 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
-    print("ng", ngpus_per_node)
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -139,117 +141,13 @@ def main():
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
 
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465),
-                             (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465),
-                             (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-    train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
-                                  transform=transform_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
-                                  transform=transform_test)
-    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_svhn_data_loaders(download, shuffle=False, batch_size=256):
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        # transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                      (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        # transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                      (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-    train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
-                                  split='train', download=download,
-                                  transform=transform_train)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test',
-                                 download=download,
-                                 transform=transform_test)
-    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_stl10_data_loaders(download, dataset = None, shuffle=False, batch_size=256):
-    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
-                                  transform=transforms.ToTensor())
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
-                                  transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_imagenet_data_loaders(shuffle=False, batch_size=256):
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    preprocessing = [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        normalize,
-    ]
-    train_dataset = datasets.ImageNet(
-        root="/scratch/ssd002/datasets/imagenet256/",   #Path for imagenet on Vector cluster
-        split = "train",
-        transform=transforms.Compose(preprocessing)
-    )
-    test_dataset = datasets.ImageNet(
-        root="/scratch/ssd002/datasets/imagenet256/",
-        # Path for imagenet on Vector cluster
-        split="val",
-        transform=transforms.Compose(preprocessing)
-    )
-
-    # indxstest = random.sample(range(0, len(test_dataset)), 10000)
-    # indxstrain = random.sample(range(0, len(train_dataset)), 50000)
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxstest)
-    # train_dataset = torch.utils.data.Subset(train_dataset,
-    #                                         indxstrain)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=False, shuffle=shuffle)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                             drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
 
 
 
 def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+    log_dir = "logs/" #f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
     logname = f"stealing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
     logging.basicConfig(
         filename=os.path.join(log_dir, logname),
@@ -280,7 +178,7 @@ def main_worker(gpu, ngpus_per_node, args):
     print("=> loading model '{}'".format(args.arch))
 
     victim_model = models.__dict__[args.arch]()
-    checkpoint = torch.load("models/resnet50SimSiam.pth.tar",
+    checkpoint = torch.load("../simsiam/models/checkpoint_0099-batch256.pth.tar",
                             map_location="cpu")
     state_dict = checkpoint['state_dict']
     for k in list(state_dict.keys()):
@@ -296,7 +194,7 @@ def main_worker(gpu, ngpus_per_node, args):
     victim_model.fc = torch.nn.Identity()
 
     # Stolen model initialzied
-    model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=512,
+    model = ResNetSimCLRV2(base_model=args.arch, out_dim=512,
                            loss=args.losstype, include_mlp=False)
 
 
@@ -365,7 +263,7 @@ def main_worker(gpu, ngpus_per_node, args):
         criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
 
-    optimizer = torch.optim.SGD(models.parameters(), init_lr,
+    optimizer = torch.optim.SGD(model.parameters(), init_lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
     if args.lars:
@@ -398,67 +296,127 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    # traindir = os.path.join(args.data, 'train')
-    # valdir = os.path.join(args.data, 'val')
-    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                  std=[0.229, 0.224, 0.225])
-    #
-    # train_dataset = datasets.ImageFolder(
-    #     traindir,
-    #     transforms.Compose([
-    #         transforms.RandomResizedCrop(224),
-    #         transforms.RandomHorizontalFlip(),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ]))
-    #
-    # if args.distributed:
-    #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    # else:
-    #     train_sampler = None
-    #
-    # train_loader = torch.utils.data.DataLoader(
-    #     train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-    #     num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-    #
-    # val_loader = torch.utils.data.DataLoader(
-    #     datasets.ImageFolder(valdir, transforms.Compose([
-    #         transforms.Resize(256),
-    #         transforms.CenterCrop(224),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ])),
-    #     batch_size=256, shuffle=False,
-    #     num_workers=args.workers, pin_memory=True)
+    if args.datasetsteal == 'imagenet':
+        traindir = os.path.join(args.data, 'train')
+        valdir = os.path.join(args.data, 'val')
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
 
+        train_dataset = datasets.ImageFolder(
+            traindir,
+            transforms.Compose([
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]))
 
-    # if args.dataset == "cifar10":
-    #     train_dataset, train_loader, val_loader = get_cifar10_data_loaders(download=False)#, batch_size=args.batch_size)
-    # elif args.dataset == "svhn":
-    #     train_dataset, train_loader, val_loader = get_svhn_data_loaders(download=False)
-    # elif args.dataset == "stl10":
-    #     train_dataset, train_loader, val_loader = get_stl10_data_loaders(download=False)
-    # else:
-    #     train_dataset, train_loader, val_loader = get_imagenet_data_loaders(batch_size=args.batch_size)
-    #
+        val_loader = torch.utils.data.DataLoader(
+            datasets.ImageFolder(valdir, transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True)
 
-    if args.datasetsteal == "cifar10":
-        query_dataset, query_loader, _ = get_cifar10_data_loaders(download=False)
-    elif args.datasetsteal == "svhn":
-        query_dataset, query_loader, _ = get_svhn_data_loaders(
-            download=False)
+    elif args.datasetsteal == 'cifar10':
+        transform_train = transforms.Compose([
+            transforms.Resize(224),
+            # transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                 (0.2023, 0.1994, 0.2010)),
+        ])
+
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(224),
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                 (0.2023, 0.1994, 0.2010)),
+        ])
+
+        train_dataset = datasets.CIFAR10(
+            root=f'{prefix}/home/nicolas/data/cifar10', train=True,
+            download=True, transform=transform_train)
+        trainloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers)
+
+        test_dataset = datasets.CIFAR10(
+            root=f'{prefix}/home/nicolas/data/cifar10', train=False,
+            download=True, transform=transform_test)
+        val_loader = torch.utils.data.DataLoader(
+            test_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers)
+
+        classes = ('plane', 'car', 'bird', 'cat', 'deer',
+                   'dog', 'frog', 'horse', 'ship', 'truck')
+
+    elif args.datasetsteal == 'cifar100':
+        transform_train = transforms.Compose([
+            transforms.Resize(224),
+            # transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                 (0.2023, 0.1994, 0.2010)),
+        ])
+
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(224),
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                 (0.2023, 0.1994, 0.2010)),
+        ])
+
+        train_dataset = datasets.CIFAR100(
+            root=f'{prefix}/home/nicolas/data/cifar100', train=True,
+            download=True, transform=transform_train)
+        trainloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers)
+
+        test_dataset = datasets.CIFAR100(
+            root=f'{prefix}/home/nicolas/data/cifar100', train=False,
+            download=True, transform=transform_test)
+        val_loader = torch.utils.data.DataLoader(
+            test_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers)
+
+    elif args.datasetsteal == 'svhn':
+
+        transform_svhn = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(224),
+        ])
+
+        train_dataset = datasets.SVHN(
+            root=f'{prefix}/home/nicolas/data/svhn', split='train',
+            download=False, transform=transform_svhn)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size,
+            num_workers=args.workers, drop_last=False, shuffle=True)
+        test_dataset = datasets.SVHN(
+            f'{prefix}/home/nicolas/data/svhn', split='test', download=False,
+            transform=transform_svhn)
+        val_loader = torch.utils.data.DataLoader(
+            test_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers)
+
     else:
-        query_dataset, query_loader, _ = get_imagenet_data_loaders(
-            batch_size=args.batch_size)
+        raise Exception(f"Unknown args.datasetsteal: {args.datasetsteal}.")
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
-            query_dataset)
+            train_dataset)
     else:
         train_sampler = None
 
     query_loader = torch.utils.data.DataLoader(
-        query_dataset, batch_size=args.batch_size,
+        train_dataset, batch_size=args.batch_size,
         shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
@@ -473,27 +431,35 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # train for one epoch (stealing)
-        train(train_loader, model, victim_model, criterion, optimizer, epoch, args)
+        train(query_loader, model, victim_model, criterion, optimizer, epoch, args)
 
-        # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        # # evaluate on validation set (doesnt apply when stealing since a linear classifier is further needed)
+        # acc1 = validate(val_loader, model, criterion, args)
 
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+        # # remember best acc@1 and save checkpoint
+        # is_best = acc1 > best_acc1
+        # best_acc1 = max(acc1, best_acc1)
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
-            if args.dataset == "cifar10" and args.modeltype == "victim":
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': args.arch,
-                    'state_dict': model.state_dict(),
-                    'best_acc1': best_acc1,
-                    'optimizer' : optimizer.state_dict(),
-                }, is_best)
-                if epoch == args.start_epoch:
-                    sanity_check(model.state_dict(), args.pretrained)
+        if epoch % 10 == 0:
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+            }, True)
+
+        # if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+        #         and args.rank % ngpus_per_node == 0):
+        #     if args.dataset == "cifar10" and args.modeltype == "victim":
+        #         save_checkpoint({
+        #             'epoch': epoch + 1,
+        #             'arch': args.arch,
+        #             'state_dict': model.state_dict(),
+        #             'best_acc1': best_acc1,
+        #             'optimizer' : optimizer.state_dict(),
+        #         }, is_best)
+        #         if epoch == args.start_epoch:
+        #             sanity_check(model.state_dict(), args.pretrained)
 
 
 def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
@@ -509,6 +475,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
 
     end = time.time()
+    num = 0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -543,6 +510,9 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
+        num += len(images)
+        if num > args.num_queries:
+            break
 
         if i % args.print_freq == 0:
             progress.display(i)
@@ -594,9 +564,9 @@ def validate(val_loader, model, criterion, args):
     return top1.avg
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, args):
     if is_best:
-        torch.save(state, "/checkpoint/akaleem/SimCLR/SimVIC/checkpoint.pth.tar")
+        torch.save(state, f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}")
     # if is_best:
     #     shutil.copyfile(filename, 'model_best.pth.tar')
 
