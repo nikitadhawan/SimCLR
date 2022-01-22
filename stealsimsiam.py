@@ -7,33 +7,33 @@
 
 import argparse
 import builtins
+import logging
 import math
 import os
 import random
 import shutil
 import time
-import warnings
-
 import torch
-import torch.nn as nn
-import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import torch.optim
 import torch.multiprocessing as mp
+import torch.nn as nn
+import torch.nn.parallel
+import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
-import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-from torch.utils.data import  DataLoader
-import logging
+import torchvision.transforms as transforms
+import warnings
+from torch.utils.data import DataLoader
+
 from models.resnet_simclr import ResNetSimCLRV2
 from utils import print_args
 
 model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
+                     if name.islower() and not name.startswith("__")
+                     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--data', metavar='DIR',
@@ -41,21 +41,23 @@ parser.add_argument('--data', metavar='DIR',
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     choices=model_names,
                     help='model architecture: ' +
-                        ' | '.join(model_names) +
-                        ' (default: resnet50)')
+                         ' | '.join(model_names) +
+                         ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=50, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=4096, type=int,
-                    metavar='N',
+parser.add_argument('-b', '--batch-size', metavar='N', type=int,
+                    # default=4096,
+                    default=128,
                     help='mini-batch size (default: 4096), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
-                    metavar='LR', help='initial (base) learning rate', dest='lr')
+                    metavar='LR', help='initial (base) learning rate',
+                    dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--wd', '--weight-decay', default=0., type=float,
@@ -126,7 +128,6 @@ def main():
         warnings.warn('You have chosen a specific GPU. This will completely '
                       'disable data parallelism.')
 
-
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
@@ -136,26 +137,26 @@ def main():
         args.world_size = ngpus_per_node * args.world_size
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
-        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
+        mp.spawn(main_worker, nprocs=ngpus_per_node,
+                 args=(ngpus_per_node, args))
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
 
 
-
-
 def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
-    log_dir = "logs/" #f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+    log_dir = "logs/"  # f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
     logname = f"stealing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
     logging.basicConfig(
         filename=os.path.join(log_dir, logname),
-        level=logging.DEBUG)
+        level=logging.DEBUG, force=True)
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
         def print_pass(*args):
             pass
+
         builtins.print = print_pass
 
     if args.gpu is not None:
@@ -171,15 +172,17 @@ def main_worker(gpu, ngpus_per_node, args):
             # For multiprocessing distributed training, rank needs to be the
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+        dist.init_process_group(backend=args.dist_backend,
+                                init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
         torch.distributed.barrier()
     # create models
     print("=> loading model '{}'".format(args.arch))
 
     victim_model = models.__dict__[args.arch]()
-    checkpoint = torch.load("../simsiam/models/checkpoint_0099-batch256.pth.tar",
-                            map_location="cpu")
+    checkpoint = torch.load(
+        "../simsiam/models/checkpoint_0099-batch256.pth.tar",
+        map_location="cpu")
     state_dict = checkpoint['state_dict']
     for k in list(state_dict.keys()):
         # retain only encoder up to before the embedding layer
@@ -196,7 +199,6 @@ def main_worker(gpu, ngpus_per_node, args):
     # Stolen model initialzied
     model = ResNetSimCLRV2(base_model=args.arch, out_dim=512,
                            loss=args.losstype, include_mlp=False)
-
 
     # if args.modeltype == "stolen":
     #     checkpoint = torch.load(
@@ -230,18 +232,23 @@ def main_worker(gpu, ngpus_per_node, args):
             # DistributedDataParallel, we need to divide the batch size
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
-            args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-            victim_model = torch.nn.parallel.DistributedDataParallel(victim_model,
+            args.workers = int(
+                (args.workers + ngpus_per_node - 1) / ngpus_per_node)
+            model = torch.nn.parallel.DistributedDataParallel(model,
                                                               device_ids=[
                                                                   args.gpu])
+            victim_model = torch.nn.parallel.DistributedDataParallel(
+                victim_model,
+                device_ids=[
+                    args.gpu])
         else:
             victim_model.cuda()
             model.cuda()
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
-            victim_model = torch.nn.parallel.DistributedDataParallel(victim_model)
+            victim_model = torch.nn.parallel.DistributedDataParallel(
+                victim_model)
 
     elif args.gpu is not None:
         torch.cuda.set_device(args.gpu)
@@ -262,14 +269,14 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.losstype == "infonce":
         criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-
     optimizer = torch.optim.SGD(model.parameters(), init_lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
     if args.lars:
         print("=> use LARS optimizer.")
         from apex.parallel.LARC import LARC
-        optimizer = LARC(optimizer=optimizer, trust_coefficient=.001, clip=False)
+        optimizer = LARC(optimizer=optimizer, trust_coefficient=.001,
+                         clip=False)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -431,7 +438,8 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # train for one epoch (stealing)
-        train(query_loader, model, victim_model, criterion, optimizer, epoch, args)
+        train(query_loader, model, victim_model, criterion, optimizer, epoch,
+              args)
 
         # # evaluate on validation set (doesnt apply when stealing since a linear classifier is further needed)
         # acc1 = validate(val_loader, model, criterion, args)
@@ -446,7 +454,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 'arch': args.arch,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-            }, True)
+            }, is_best=True, args=args)
 
         # if not args.multiprocessing_distributed or (args.multiprocessing_distributed
         #         and args.rank % ngpus_per_node == 0):
@@ -470,9 +478,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
     # top5 = AverageMeter('Acc@5', ':6.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses], #, top1, top5],
+        [batch_time, data_time, losses],  # , top1, top5],
         prefix="Epoch: [{}]".format(epoch))
-
 
     end = time.time()
     num = 0
@@ -482,7 +489,6 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
-
 
         # compute output
         victim_features = victim_model(images)
@@ -559,14 +565,15 @@ def validate(val_loader, model, criterion, args):
         print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
               .format(top1=top1, top5=top5))
         logging.debug(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+                      .format(top1=top1, top5=top5))
 
     return top1.avg
 
 
 def save_checkpoint(state, is_best, args):
     if is_best:
-        torch.save(state, f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}")
+        torch.save(state,
+                   f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}")
     # if is_best:
     #     shutil.copyfile(filename, 'model_best.pth.tar')
 
@@ -597,6 +604,7 @@ def sanity_check(state_dict, pretrained_weights):
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self, name, fmt=':f'):
         self.name = name
         self.fmt = fmt

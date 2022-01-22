@@ -37,7 +37,8 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False, watermark="False", entropy="False"):
+def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False,
+                watermark="False", entropy="False"):
     if watermark == "True":
         checkpoint = torch.load(
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}WATERMARK.pth.tar",
@@ -52,7 +53,7 @@ def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False, w
             map_location=device)
     state_dict = checkpoint['state_dict']
     new_state_dict = state_dict.copy()
-    if discard_mlp: # no longer necessary as the model architecture has no backbone.fc layers
+    if discard_mlp:  # no longer necessary as the model architecture has no backbone.fc layers
         for k in list(state_dict.keys()):
             if k.startswith('backbone.fc'):
                 del new_state_dict[k]
@@ -73,3 +74,38 @@ def load_watermark(epochs, dataset, model, arch, loss, device):
 
     model.load_state_dict(state_dict)
     return model
+
+
+def print_args(args, get_str=False):
+    if "delimiter" in args:
+        delimiter = args.delimiter
+    elif "sep" in args:
+        delimiter = args.sep
+    else:
+        delimiter = ";"
+    print("###################################################################")
+    print("args: ")
+    keys = sorted(
+        [
+            a
+            for a in dir(args)
+            if not (
+                a.startswith("__")
+                or a.startswith("_")
+                or a == "sep"
+                or a == "delimiter"
+        )
+        ]
+    )
+    values = [getattr(args, key) for key in keys]
+    if get_str:
+        keys_str = delimiter.join([str(a) for a in keys])
+        values_str = delimiter.join([str(a) for a in values])
+        print(keys_str)
+        print(values_str)
+        return keys_str, values_str
+    else:
+        for key, value in zip(keys, values):
+            print(key, ": ", value, flush=True)
+    print("ARGS FINISHED", flush=True)
+    print("######################################################")
