@@ -102,17 +102,26 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-dataset = ContrastiveLearningDataset(args.data)
-train_dataset = dataset.get_dataset(args.dataset, args.n_views) # this is the dataset the victim was trained on.
+dataset = ContrastiveLearningDataset(args.data) # RegularDataset(args.data) #
+train_dataset = dataset.get_dataset(args.dataset,  args.n_views) # this is the dataset the victim was trained on.
 train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_dataset = dataset.get_test_dataset(args.dataset,
-                                                 1)
-indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-test_dataset = torch.utils.data.Subset(test_dataset,
+dataset2 = RegularDataset(args.data)
+val_dataset = dataset2.get_dataset(args.dataset, 1)
+indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
+val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
+val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
+
+test_dataset = dataset2.get_test_dataset(args.dataset,
+                                                 1)
+# indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+# test_dataset = torch.utils.data.Subset(test_dataset,
+#                                            indxs)
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -200,50 +209,117 @@ else:
         device)
     random_model2 = load_victim(100, "cifar10", random_model2,
                                "resnet34", "infonce2",
-                               device=device, discard_mlp=True)
+                               device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
 victim_model.eval()
 stolen_model.eval()
 random_model.eval()
 random_model2.eval()
 
-randomvic = []
-randomvic2 = []
-stolenvic = []
-for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
+randomvictrain = []
+stolenvictrain = []
+for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # On val loader .
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
     stolen_features = stolen_model(images)
-    random_features = random_model(images)
     random_features2 = random_model2(images)
     dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
-    dist2 = (victim_features - random_features).pow(2).sum(1).sqrt()
     dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
-    randomvic.extend(dist2.tolist())
-    randomvic2.extend(dist3.tolist())
-    stolenvic.extend(dist.tolist())
-    #dist = criterion2(victim_features, stolen_features)
-    #dist2 = criterion2(victim_features, random_features)
-    #stolenvic.append(dist.mean().item())
-    #randomvic.append(dist2.mean().item())
-    if counter >= 100:
+    randomvictrain.extend(dist3.tolist())
+    stolenvictrain.extend(dist.tolist())
+    if counter >= 20:
         break
 
-# tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
-# print('Null hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
-print("mean 1", np.mean(randomvic))
-print("mean 2", np.mean(randomvic2))
-tval, pval = ttest(randomvic, randomvic2, alternative="greater")
-print('Null hypothesis D = dist(vic, M1) <= E = dist(vic, M2): ', ' pval: ', pval)
-tval, pval = ttest(randomvic2, randomvic, alternative="greater")
-print('Null hypothesis E = dist(vic, M2) <= D = dist(vic, M1): ', ' pval: ', pval)
+
+randomvicval = []
+stolenvicval = []
+for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # On val loader .
+    images = torch.cat(images, dim=0)
+    images = images.to(device)
+    victim_features = victim_model(images)
+    stolen_features = stolen_model(images)
+    random_features2 = random_model2(images)
+    dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+    randomvicval.extend(dist3.tolist())
+    stolenvicval.extend(dist.tolist())
 
 
-print(f"mean distance between stolen and victim where stolen model used loss {args.losstype}", np.mean(stolenvic))
-print("mean distance between victim and random", np.mean(randomvic))
-# tval, pval = ttest(stolenvic, randomvic, alternative="greater")
-# print('tval 0 hypothesis dist(vic, M3) <= dist(vic, M1): ', tval, ' pval: ', pval)
-tval, pval = ttest(randomvic, stolenvic, alternative="greater")
-print('Null hypothesis dist(vic, M1) <= dist(vic, stolen): ', ' pval: ', pval)
+randomvictest = []
+stolenvictest = []
 
+for counter, (images, truelabels) in enumerate(
+        tqdm(test_loader)):  # On test loader .
+    images = torch.cat(images, dim=0)
+    images = images.to(device)
+    victim_features = victim_model(images)
+    stolen_features = stolen_model(images)
+    random_features2 = random_model2(images)
+    dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+    randomvictest.extend(dist3.tolist())
+    stolenvictest.extend(dist.tolist())
+
+
+tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
+print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
+# tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
+# print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
+
+tval, pval = ttest(stolenvictest, stolenvicval, alternative="greater")
+print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ', pval)
+
+
+
+
+print("random_val", np.mean(randomvicval))
+print("random_val var", np.var(randomvicval))
+print("random2_test", np.mean(randomvictest))
+print("random2_test var", np.var(randomvictest))
+print("random2_train", np.mean(randomvictrain))
+print("stolen1_val", np.mean(stolenvicval))
+print("stolen2_test", np.mean(stolenvictest))
+print("stolen2_train", np.mean(stolenvictrain))
+
+#### Previous approach
+# randomvic = []
+# randomvic2 = []
+# stolenvic = []
+# for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
+#     images = torch.cat(images, dim=0)
+#     images = images.to(device)
+#     victim_features = victim_model(images)
+#     stolen_features = stolen_model(images)
+#     random_features = random_model(images)
+#     random_features2 = random_model2(images)
+#     dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+#     dist2 = (victim_features - random_features).pow(2).sum(1).sqrt()
+#     dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+#     randomvic.extend(dist2.tolist())
+#     randomvic2.extend(dist3.tolist())
+#     stolenvic.extend(dist.tolist())
+#     #dist = criterion2(victim_features, stolen_features)
+#     #dist2 = criterion2(victim_features, random_features)
+#     #stolenvic.append(dist.mean().item())
+#     #randomvic.append(dist2.mean().item())
+#     if counter >= 100:
+#         break
+#
+# # tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
+# # print('Null hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
+# print("mean 1", np.mean(randomvic))
+# print("mean 2", np.mean(randomvic2))
+# tval, pval = ttest(randomvic, randomvic2, alternative="greater")
+# print('Null hypothesis D = dist(vic, M1) <= E = dist(vic, M2): ', ' pval: ', pval)
+# tval, pval = ttest(randomvic2, randomvic, alternative="greater")
+# print('Null hypothesis E = dist(vic, M2) <= D = dist(vic, M1): ', ' pval: ', pval)
+#
+#
+# print(f"mean distance between stolen and victim where stolen model used loss {args.losstype}", np.mean(stolenvic))
+# print("mean distance between victim and random", np.mean(randomvic))
+# # tval, pval = ttest(stolenvic, randomvic, alternative="greater")
+# # print('tval 0 hypothesis dist(vic, M3) <= dist(vic, M1): ', tval, ' pval: ', pval)
+# tval, pval = ttest(randomvic, stolenvic, alternative="greater")
+# print('Null hypothesis dist(vic, M1) <= dist(vic, stolen): ', ' pval: ', pval)
+#
 
