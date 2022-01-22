@@ -5,6 +5,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import getpass
+
 import argparse
 import builtins
 import logging
@@ -32,6 +34,16 @@ from loss import soft_nn_loss_imagenet, pairwise_euclid_distance
 
 from models.resnet_simclr import ResNetSimCLRV2
 from utils import print_args
+
+user = getpass.getuser()
+
+if user == 'akaleem':
+    prefix = '/ssd003'
+else:
+    prefix = ''
+    user = 'nicolas'
+
+
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -111,7 +123,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--temperaturesn', default=1000, type=float,
                     help='temperature for soft nearest neighbors loss')
 
-prefix = ''
+
 best_acc1 = 0
 
 
@@ -185,7 +197,10 @@ def main():
 def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
-    log_dir = "logs/"  # f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+    if user == "akaleem":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/"
+    else:
+        log_dir = "logs/"
     logname = f"stealing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
     logging.basicConfig(
         filename=os.path.join(log_dir, logname),
@@ -218,9 +233,14 @@ def main_worker(gpu, ngpus_per_node, args):
     print("=> loading model '{}'".format(args.arch))
 
     victim_model = models.__dict__[args.arch]()
-    checkpoint = torch.load(
-        "../simsiam/models/checkpoint_0099-batch256.pth.tar",
-        map_location="cpu")
+    if user == "akaleem":
+        checkpoint = torch.load(
+            "models/checkpoint_0099-batch256.pth.tar",
+            map_location="cpu")
+    else:
+        checkpoint = torch.load(
+            "../simsiam/models/checkpoint_0099-batch256.pth.tar",
+            map_location="cpu")
     state_dict = checkpoint['state_dict']
     for k in list(state_dict.keys()):
         # retain only encoder up to before the embedding layer
@@ -387,14 +407,14 @@ def main_worker(gpu, ngpus_per_node, args):
         ])
 
         train_dataset = datasets.CIFAR10(
-            root=f'{prefix}/home/nicolas/data/cifar10', train=True,
+            root=f'{prefix}/home/{user}/data/cifar10', train=True,
             download=True, transform=transform_train)
         trainloader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size, shuffle=True,
             num_workers=args.workers)
 
         test_dataset = datasets.CIFAR10(
-            root=f'{prefix}/home/nicolas/data/cifar10', train=False,
+            root=f'{prefix}/home/{user}/data/cifar10', train=False,
             download=True, transform=transform_test)
         val_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=args.batch_size, shuffle=False,
@@ -620,8 +640,13 @@ def validate(val_loader, model, criterion, args):
 
 def save_checkpoint(state, is_best, args):
     if is_best:
-        torch.save(state,
-                   f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
+        uname = getpass.getuser()
+        if uname == "akaleem":
+            torch.save(state,
+                       f"checkpoint/akaleem/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
+        else:
+            torch.save(state,
+                       f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
     # if is_best:
     #     shutil.copyfile(filename, 'model_best.pth.tar')
 
