@@ -522,6 +522,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         if i % args.print_freq == 0:
             progress.display(i)
+            logging.debug(f"Epoch: {epoch}. Loss: {loss.item()}")
 
 
 def validate(val_loader, model, criterion, args):
@@ -573,7 +574,7 @@ def validate(val_loader, model, criterion, args):
 def save_checkpoint(state, is_best, args):
     if is_best:
         torch.save(state,
-                   f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}")
+                   f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
     # if is_best:
     #     shutil.copyfile(filename, 'model_best.pth.tar')
 
