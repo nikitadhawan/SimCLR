@@ -85,6 +85,10 @@ def main():
 
     train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
+    if args.losstype == "infonce2":
+        indxs = list(range(0, len(train_dataset) - 10000)) # not using full training set when training
+        train_dataset = torch.utils.data.Subset(train_dataset,
+                                           indxs)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)

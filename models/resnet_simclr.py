@@ -162,6 +162,7 @@ class SimSiam(nn.Module):
 
         return p1, p2, z1.detach(), z2.detach()
 
+
 class HeadSimSiam(nn.Module):
     """ Takes a representation as input and passes it through the head to get g(z)"""
     def __init__(self, out_dim):

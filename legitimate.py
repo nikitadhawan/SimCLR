@@ -215,9 +215,12 @@ if __name__ == "__main__":
                     sims = criterion2(
                         rep2[i].expand(all_reps.shape[0],
                                                   all_reps.shape[1]), all_reps) # cosine similarity
-                    sims = (sims > 0.5 and sims != 1.0).to(
-                        torch.float32)  # with cosine similarity
-                    if sims.sum().item() > 0 and args.sigma > 0:
+                    sims = ((sims + 1) / 2)
+                    maxval = sims.max()
+                    maxpos = torch.argmax(sims)
+                    # sims = (sims > 0.5 and sims != 1.0).to(
+                    #     torch.float32)  # with cosine similarity
+                    if maxval.item() > 0.8 and args.sigma > 0:
                         # was +=
                         rep[i] = torch.empty(
                             rep[i].size()).normal_(mean=1000,
@@ -259,11 +262,18 @@ if __name__ == "__main__":
                 rep2 = victim_head(x_batch)
                 all_reps = torch.t(rep2[0].reshape(-1,1))
                 for i in range(1, rep.shape[0]):
-                    sims = (rep2[i].expand(all_reps.shape[0],
-                                                     all_reps.shape[
-                                                         1]) - all_reps).pow(2).sum(1).sqrt()
-                    sims = (sims < 13).to(torch.float32)
-                    if sims.sum().item() > 0 and args.sigma > 0:
+                    # sims = (rep2[i].expand(all_reps.shape[0],
+                    #                                  all_reps.shape[
+                    #                                      1]) - all_reps).pow(2).sum(1).sqrt()
+                    # sims = (sims < 13).to(torch.float32)
+                    sims = criterion2(
+                        rep2[i].expand(all_reps.shape[0],
+                                       all_reps.shape[1]),
+                        all_reps)  # cosine similarity
+                    sims = ((sims + 1) / 2)
+                    maxval = sims.max()
+                    maxpos = torch.argmax(sims)
+                    if  maxval.item() > 0.8 and args.sigma > 0: #sims.sum().item() > 0
                         # was +=
                         rep[i] = torch.empty(
                             rep[i].size()).normal_(mean=1000,

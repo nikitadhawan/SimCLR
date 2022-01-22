@@ -262,3 +262,103 @@ class WatermarkDataset:
             raise InvalidDatasetSelection()
         else:
             return dataset_fn()
+
+
+class ImageNetDataset:
+    def __init__(self, root_folder):
+        self.root_folder = root_folder
+
+    @staticmethod
+    def get_simclr_pipeline_transform(size, s=1):
+        data_transforms = transforms.Compose([transforms.ToTensor()])
+        return data_transforms
+
+    @staticmethod
+    def get_imagenet_transform(size, s=1):
+        data_transforms = transforms.Compose([
+        transforms.RandomResizedCrop(size),
+        transforms.ToTensor()])
+        return data_transforms
+
+    def get_dataset(self, name, n_views):
+        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
+                                                              transform= transforms.Compose([
+                                                                transforms.RandomCrop(32, padding=4),
+                                                                transforms.RandomHorizontalFlip(),
+                                                                transforms.ToTensor(),
+                                                                # transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                                                #                      (0.2023, 0.1994, 0.2010)),
+                                                                transforms.Resize(224),
+                                                            ]),
+                                                              download=False),
+
+                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled',
+                                                          transform=transforms.Compose([
+                                                                transforms.ToTensor(),
+                                                                transforms.Resize(224),
+                                                            ]),
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                        split='train',
+                                                        transform=transforms.Compose([
+                                                                transforms.RandomCrop(32, padding=4),
+                                                                transforms.RandomHorizontalFlip(),
+                                                                transforms.ToTensor(),
+                                                                # transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                                                #                      (0.2023, 0.1994, 0.2010)),
+                                                                transforms.Resize(224),
+                                                            ]),
+                                                        download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='train',
+                              transform=self.get_imagenet_transform(224))
+                          }
+
+        try:
+            dataset_fn = valid_datasets[name]
+        except KeyError:
+            raise InvalidDatasetSelection()
+        else:
+            return dataset_fn()
+    def get_test_dataset(self, name, n_views):
+        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
+                                                              transform= transforms.Compose([
+                                                                transforms.ToTensor(),
+                                                                # transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                                                #                      (0.2023, 0.1994, 0.2010)),
+                                                                transforms.Resize(224),
+                                                            ]),
+                                                              download=False),
+
+                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
+                                                          transform=transforms.Compose(
+                                                              [
+                                                                  transforms.ToTensor(),
+                                                                  transforms.Resize(
+                                                                      224),
+                                                              ]),
+                                                          download=True),
+
+                          'svhn': lambda: datasets.SVHN(self.root_folder+"/SVHN",
+                                                        split='train',
+                                                        transform=transforms.Compose([
+                                                                transforms.ToTensor(),
+                                                                # transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                                                #                      (0.2023, 0.1994, 0.2010)),
+                                                                transforms.Resize(224),
+                                                            ]),
+                                                        download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='val',
+                              transform=self.get_imagenet_transform(224))
+                          }
+
+        try:
+            dataset_fn = valid_datasets[name]
+        except KeyError:
+            raise InvalidDatasetSelection()
+        else:
+            return dataset_fn()

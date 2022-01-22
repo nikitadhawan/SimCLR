@@ -231,6 +231,8 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
 
 # tval, pval = ttest(randomvic, randomvic2, alternative="two.sided")
 # print('Null hypothesis dist(vic, M1) == dist(vic, M2): ', tval, ' pval: ', pval)
+print("mean 1", np.mean(randomvic))
+print("mean 2", np.mean(randomvic2))
 tval, pval = ttest(randomvic, randomvic2, alternative="greater")
 print('Null hypothesis D = dist(vic, M1) <= E = dist(vic, M2): ', ' pval: ', pval)
 tval, pval = ttest(randomvic2, randomvic, alternative="greater")

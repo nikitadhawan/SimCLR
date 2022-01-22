@@ -155,10 +155,10 @@ class SimCLR(object):
 
                 scaler.step(self.optimizer)
                 scaler.update()
-                if self.args.losstype == "infonce2": # to test other number of training samples
-                    total_queries += len(images)
-                    if total_queries >= self.args.num_queries:
-                        break
+                # if self.args.losstype == "infonce2": # to test other number of training samples
+                #     total_queries += len(images)
+                #     if total_queries >= self.args.num_queries:
+                #         break
                 n_iter += 1
             if watermark_loader is not None:
                 watermark_accuracy = 0
@@ -485,3 +485,119 @@ class SimCLR(object):
             watermark_accuracy /= (counter + 1)
             print(f"Watermark accuracy is {watermark_accuracy.item()}.")
             logging.info(f"Watermark accuracy is {watermark_accuracy.item()}.")
+
+
+    def stealimagenet(self, train_loader, num_queries, watermark_loader=None):
+        self.model.train()
+        self.victim_model.eval()
+        if self.args.defence == "True":
+            self.victim_head.eval()
+            self.entropy_model.eval()
+        if watermark_loader is not None:
+            self.watermark_mlp.eval()
+        scaler = GradScaler(enabled=self.args.fp16_precision)
+
+        # save config file
+        save_config_file(self.log_dir2, self.args)
+
+        n_iter = 0
+        logging.info(f"Start SimCLR stealing for {self.args.epochs} epochs.")
+        logging.info(f"Using loss type: {self.loss}")
+        logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
+        logging.info(f"Args: {self.args}")
+
+        for epoch_counter in range(self.args.epochs):
+            total_queries = 0
+            all_reps = None
+            # tp = []
+            # fp = []
+            y_true = []
+            y_pred = []
+            y_pred_raw = []
+            for images, truelabels in tqdm(train_loader):
+                #images = torch.cat(images, dim=0)
+                images = images.to(self.args.device)
+                query_features = self.victim_model(images) # victim model representations
+                if self.loss != "symmetrized":
+                    features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
+                if self.loss == "softce":
+                    loss = self.criterion(features,F.softmax(features, dim=1))  #  F.softmax(query_features/self.args.temperature, dim=1))
+                elif self.loss == "infonce":
+                    all_features = torch.cat([features, query_features], dim=0)
+                    logits, labels = self.info_nce_loss(all_features)
+                    loss = self.criterion(logits, labels)
+                elif self.loss == "bce":
+                    loss = self.criterion(features, torch.round(torch.sigmoid(query_features))) # torch.round to convert it to one hot style representation
+                elif self.loss == "softnn":
+                    all_features = torch.cat([features, query_features], dim=0)
+                    loss = self.criterion(self.args, all_features, pairwise_euclid_distance, self.tempsn)
+                elif self.loss == "supcon":
+                    all_features = torch.cat([F.normalize(features, dim=1) , F.normalize(query_features, dim=1) ], dim=0)
+                    labels = truelabels.repeat(2) # for victim and stolen features
+                    bsz = labels.shape[0]
+                    f1, f2 = torch.split(all_features, [bsz, bsz], dim=0)
+                    all_features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)],
+                                         dim=1)
+                    loss = self.criterion(all_features, labels)
+                elif self.loss == "symmetrized":
+                    #https://github.com/facebookresearch/simsiam/blob/main/main_simsiam.py#L294
+                    # p is the output from the predictor (i.e. stolen model in this case)
+                    # z is the output from the victim model (so the direct representation)
+                    # when initializing, we need to include head for stolen, not for victim and set out_dim = 512
+                    # first half of images includes all images under the first augmentation, second half includes under the second augmentation
+                    x1 = images[:int(len(images)/2)]
+                    x2 = images[int(len(images)/2):]
+                    # p1 =  self.model(x1)
+                    # p2 = self.model(x2) # output from stolen model for each augmentation (including head)
+                    p1, p2, _, _ = self.model(x1, x2)
+                    y1 = self.victim_model(x1).detach()
+                    y2 = self.victim_model(x2).detach() # raw representations from victim
+                    z1 = self.model.encoder.fc(y1)
+                    z2 = self.model.encoder.fc(y2) # pass representations through attacker's encoder. This gives a better performance.
+                    loss = -(self.criterion(p1, z2).mean() + self.criterion(p2,
+                                                                  z1).mean()) * 0.5
+                    # loss = neg_cosine(p1, z2)/2 + neg_cosine(p2, z1)/2 # same as above
+                    #loss = (regression_loss(p1, z2) + regression_loss(p2, z1)).mean() # from BYOL (seems to work better)
+                elif self.loss == "barlow":
+                    x1 = images[:int(len(images) / 2)]
+                    x2 = images[int(len(images) / 2):]
+                    p1 = self.model(x1)
+                    p2 = self.model(x2)
+                    y1 = self.victim_model(x1).detach()
+                    y2 = self.victim_model(x2).detach()
+                    P1 = torch.cat([p1, y1], dim=0) # combine all representations on the first view
+                    P2 = torch.cat([p2, y2], dim=0) # combine all representations on the second view
+                    loss = self.criterion(P1, P2, self.args.device)
+                else:
+                    loss = self.criterion(features, query_features)
+                self.optimizer.zero_grad()
+
+                scaler.scale(loss).backward()
+
+                scaler.step(self.optimizer)
+                scaler.update()
+
+                n_iter += 1
+                total_queries += len(images)
+                if total_queries >= num_queries:
+                    break
+
+            # warmup for the first 10 epochs
+            if epoch_counter >= 10:
+                self.scheduler.step()
+
+            logging.debug(
+                f"Epoch: {epoch_counter}\tLoss: {loss}\t")
+
+        logging.info("Stealing has finished.")
+        # save model checkpoints
+        checkpoint_name = f'stolen_checkpoint_{self.args.num_queries}_{self.loss}_{self.args.datasetsteal}.pth.tar'
+        save_checkpoint({
+            'epoch': self.args.epochs,
+            'arch': self.args.arch,
+            'state_dict': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }, is_best=False,
+            filename=os.path.join(self.log_dir2, checkpoint_name))
+        logging.info(
+            f"Stolen model checkpoint and metadata has been saved at {self.log_dir2}.")

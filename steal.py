@@ -3,8 +3,9 @@ import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
-    RegularDataset, WatermarkDataset
+    RegularDataset, WatermarkDataset, ImageNetDataset
 from models.resnet_simclr import ResNetSimCLR, ResNetSimCLRV2, SimSiam, WatermarkMLP
+from models.resnet_wider import resnet50rep
 from simclr import SimCLR
 from utils import load_victim, load_watermark
 import os
@@ -129,13 +130,16 @@ def main():
         args.arch = "resnet50"
         args.archstolen = "resnet50"
         args.out_dim = 512
+        dataset = ImageNetDataset(args.data)
+        args.batch_size = 64
+        assert args.n_views == 1
 
     print("args", args)
 
     #train_dataset = dataset.get_dataset(args.dataset, args.n_views)
 
     if args.datasetsteal == "imagenet":
-        query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views) # can change to get_test_dataset
+        query_dataset = dataset.get_test_dataset(args.datasetsteal, args.n_views) # can change to get_test_dataset
     elif args.datasetsteal != args.dataset or args.force == "True":
         query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
         indxs = list(range(0, len(query_dataset)))
@@ -147,7 +151,7 @@ def main():
         indxs = list(range(0, len(query_dataset) - 1000))
 
         query_dataset = torch.utils.data.Subset(query_dataset,
-                                               indxs)  # query set (without last 1000 samples as they are used in the test set)
+                                                indxs)  # query set (without last 1000 samples as they are used in the test set)
     # train_loader = torch.utils.data.DataLoader(
     #     train_dataset, batch_size=args.batch_size, shuffle=False,
     #     num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -157,9 +161,34 @@ def main():
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     if args.dataset == "imagenet":
-        victim_model = models.resnet50(pretrained=True)
+        # victim_model = models.resnet50(pretrained=True)
+        # victim_model.fc = torch.nn.Identity()
+        # 2048 dimensional output (torch network)
+        ####
+        victim_model = models.resnet50()
+        checkpoint = torch.load("models/resnet50SimSiam.pth.tar", map_location="cpu")
+        state_dict = checkpoint['state_dict']
+        for k in list(state_dict.keys()):
+            # retain only encoder up to before the embedding layer
+            if k.startswith('module.encoder') and not k.startswith(
+                    'module.encoder.fc'):
+                # remove prefix
+                state_dict[k[len("module.encoder."):]] = state_dict[k]
+            # delete renamed or unused k
+            del state_dict[k]
+        #print("state dict", state_dict.keys())
+        victim_model.load_state_dict(state_dict, strict=False)
         victim_model.fc = torch.nn.Identity()
-        # 2048 dimensional output
+        #print("victim", victim_model)
+        ####
+        # victim_model = resnet50rep().to(args.device)
+        # checkpoint = torch.load(
+        #         f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=args.device)
+        # state_dict = checkpoint['state_dict']
+        # victim_model.load_state_dict(state_dict, strict=False)
+        # victim_model.fc = torch.nn.Identity()
+        ###
+
     else:
         if args.victimhead == "False":
             victim_model = ResNetSimCLRV2(base_model=args.arch,
@@ -227,7 +256,13 @@ def main():
         query_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        if args.defence == "True":
+        if args.dataset == "imagenet":
+            simclr = SimCLR(stealing=True, victim_model=victim_model,
+                            model=model, optimizer=optimizer,
+                            scheduler=scheduler,
+                            args=args, logdir=args.logdir, loss=args.losstype)
+            simclr.stealimagenet(query_loader, args.num_queries)
+        elif args.defence == "True":
             simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
                             model=model, optimizer=optimizer, scheduler=scheduler,
                             args=args, logdir=args.logdir, loss=args.losstype)

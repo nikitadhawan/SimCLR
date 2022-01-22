@@ -33,22 +33,22 @@ watermark_mlp = load_watermark(100, "cifar10",
 
 
 # To test the watermarked victim
-model = ResNetSimCLRV2(base_model="resnet18",
-                                  out_dim=128, loss=None,
-                                  include_mlp=False).to(device)
-model = load_victim(100, "cifar10", model,
-                           "resnet18", "infonce",
-                           device=device, discard_mlp=True,
-                           watermark="True") # watermarked victim
-
-
-# model = ResNetSimCLRV2(base_model="resnet34",
+# model = ResNetSimCLRV2(base_model="resnet18",
 #                                   out_dim=128, loss=None,
 #                                   include_mlp=False).to(device)
-# model = load_victim(200, "cifar10", model,
-#                            "resnet34", "infonce",
+# model = load_victim(100, "cifar10", model,
+#                            "resnet18", "infonce",
 #                            device=device, discard_mlp=True,
-#                            watermark="False")
+#                            watermark="True") # watermarked victim
+
+
+model = ResNetSimCLRV2(base_model="resnet34",
+                                  out_dim=128, loss=None,
+                                  include_mlp=False).to(device)
+model = load_victim(200, "cifar10", model,
+                           "resnet34", "infonce",
+                           device=device, discard_mlp=True,
+                           watermark="False")
 model.eval()
 watermark_mlp.eval()
 watermark_accuracy = 0

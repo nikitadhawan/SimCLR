@@ -72,6 +72,7 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
     if dataset == "imagenet":
         model = torchvision.models.resnet50(pretrained=True).to(device)
         model.fc = torch.nn.Linear(2048, 10).to(device)
+        #####
         # class ResNet50(torch.nn.Module):
         #     def __init__(self, pretrained, num_classes=10):
         #         super(ResNet50, self).__init__()
@@ -159,7 +160,7 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
-def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+def get_stl10_data_loaders(download, dataset = None, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
@@ -170,13 +171,39 @@ def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
-                                  transform=transforms.ToTensor())
+def get_cifar10_data_loaders(download, dataset = None, shuffle=False, batch_size=args.batch_size):
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        # transforms.Normalize((0.4914, 0.4822, 0.4465),
+        #                      (0.2023, 0.1994, 0.2010)),
+        transforms.Resize(224),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        # transforms.Normalize((0.4914, 0.4822, 0.4465),
+        #                      (0.2023, 0.1994, 0.2010)),
+        transforms.Resize(224),
+    ])
+    if dataset == "imagenet":
+        train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+                                         train=True, download=download,
+                                         transform=transform_train)
+        test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+                                        train=False, download=download,
+                                        transform=transform_test)
+    else:
+        train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
+                                      transform=transforms.ToTensor())
+        test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+                                        train=False, download=download,
+                                        transform=transforms.ToTensor())
+
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
-                                  transform=transforms.ToTensor())
+
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,
                                            indxs)  # only select last 1000 samples to prevent overlap with queried samples.
@@ -184,13 +211,35 @@ def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_svhn_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
-                                  transform=transforms.ToTensor())
+def get_svhn_data_loaders(download, dataset = None, shuffle=False, batch_size=args.batch_size):
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Resize(224),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize(224),
+    ])
+    if dataset == "imagenet":
+        train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
+                                      transform=transform_train)
+    else:
+        train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
+                                      split='train', download=download,
+                                      transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test', download=download,
-                                  transform=transforms.ToTensor())
+
+    if dataset == "imagenet":
+        test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test', download=download,
+                                  transform=transform_test)
+    else:
+        test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
+                                     split='test', download=download,
+                                     transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,
                                            indxs)  # only select last 1000 samples to prevent overlap with queried samples.
@@ -244,6 +293,7 @@ if args.clear == "True":
 logging.basicConfig(
     filename=os.path.join(log_dir, logname),
     level=logging.DEBUG)
+print(f"logging to {os.path.join(log_dir, logname)}")
 
 if args.arch == 'resnet18':
     model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
@@ -263,17 +313,21 @@ else:
     print("Evaluating stolen model")
 
 if args.dataset_test == 'cifar10':
-    train_loader, test_loader = get_cifar10_data_loaders(download=False)
+    train_loader, test_loader = get_cifar10_data_loaders(download=False, dataset=args.dataset)
 elif args.dataset_test == 'stl10':
-    train_loader, test_loader = get_stl10_data_loaders(download=False)
+    train_loader, test_loader = get_stl10_data_loaders(download=False, dataset = args.dataset)
 elif args.dataset_test == "svhn":
-    train_loader, test_loader = get_svhn_data_loaders(download=False)
+    train_loader, test_loader = get_svhn_data_loaders(download=False, dataset = args.dataset)
 
 # freeze all layers but the last fc (can try by training all layers)
 
 for name, param in model.named_parameters():
     if name not in ['fc.weight', 'fc.bias'] and name not in ['fc.0.weight', 'fc.0.bias'] :
         param.requires_grad = False
+#
+# model.fc.weight.data.normal_(mean=0.0, std=0.01)
+# model.fc.bias.data.zero_()
+
 
 # params_to_update = []
 # #https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
@@ -286,8 +340,11 @@ parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
 if args.modeltype == "victim":
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008) # params_to_update
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+                                 momentum=0.9, weight_decay=0.0008)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008) # params_to_update
     criterion = torch.nn.CrossEntropyLoss().to(device)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 else:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                  weight_decay=0.0008)
@@ -318,6 +375,7 @@ for epoch in range(epochs):
     top1_train_accuracy /= (counter + 1)
     top1_accuracy = 0
     top5_accuracy = 0
+    test_loss = 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
@@ -327,6 +385,10 @@ for epoch in range(epochs):
         top1, top5 = accuracy(logits, y_batch, topk=(1,5))
         top1_accuracy += top1[0]
         top5_accuracy += top5[0]
+        test_loss += criterion(logits, y_batch)
+    # if args.dataset == "imagenet":
+    #     print("test", test_loss   )
+    #     scheduler.step(test_loss)
 
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
