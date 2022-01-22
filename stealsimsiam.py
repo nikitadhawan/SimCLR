@@ -43,7 +43,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: ' +
                          ' | '.join(model_names) +
                          ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=20, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=50, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -98,7 +98,7 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochssteal', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
-parser.add_argument('--num_queries', default=10000, type=int, metavar='N',
+parser.add_argument('--num_queries', default=50000, type=int, metavar='N',
                     help='number of queries to steal with with')
 parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use.')
@@ -504,7 +504,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        # losses.update(loss.item(), images.size(0))
+        losses.update(loss.item(), images.size(0))
         # top1.update(acc1[0], images.size(0))
         # top5.update(acc5[0], images.size(0))
 
