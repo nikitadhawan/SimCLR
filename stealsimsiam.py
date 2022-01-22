@@ -546,7 +546,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         elif args.losstype == "softnn":
             all_features = torch.cat([stolen_features, victim_features], dim=0)
-            loss = self.criterion(self.args, all_features,
+            loss = criterion(args, all_features,
                                   pairwise_euclid_distance, args.temperaturesn)
 
         # measure accuracy and record loss
