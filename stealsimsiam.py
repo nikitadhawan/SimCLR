@@ -18,6 +18,7 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
@@ -104,9 +105,45 @@ parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use.')
 parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
+parser.add_argument('--temperature', default=0.07, type=float,
+                    help='softmax temperature (default: 0.07)')
+parser.add_argument('--temperaturesn', default=100, type=float,
+                    help='temperature for soft nearest neighbors loss')
 
 prefix = ''
 best_acc1 = 0
+
+
+def info_nce_loss(features, args):
+    n = int(features.size()[0] / args.batch_size)
+    labels = torch.cat(
+        [torch.arange(args.batch_size) for i in range(n)], dim=0)
+    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    labels = labels
+
+    features = F.normalize(features, dim=1)
+
+    similarity_matrix = torch.matmul(features, features.T)
+    # assert similarity_matrix.shape == (
+    #     args.n_views * args.batch_size, args.n_views * args.batch_size)
+    # assert similarity_matrix.shape == labels.shape
+
+    # discard the main diagonal from both: labels and similarities matrix
+    mask = torch.eye(labels.shape[0], dtype=torch.bool)
+    labels = labels[~mask].view(labels.shape[0], -1)
+    similarity_matrix = similarity_matrix[~mask].view(
+        similarity_matrix.shape[0], -1)
+    # assert similarity_matrix.shape == labels.shape
+    # select and combine multiple positives
+    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+
+    # select only the negatives
+    negatives = similarity_matrix[~labels.bool()].view(
+        similarity_matrix.shape[0], -1)
+    logits = torch.cat([positives, negatives], dim=1)
+    labels = torch.zeros(logits.shape[0], dtype=torch.long)
+    logits = logits / args.temperature
+    return logits, labels
 
 
 def main():
@@ -151,7 +188,7 @@ def main_worker(gpu, ngpus_per_node, args):
     logname = f"stealing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
     logging.basicConfig(
         filename=os.path.join(log_dir, logname),
-        level=logging.DEBUG, force=True)
+        level=logging.DEBUG)
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
         def print_pass(*args):
@@ -269,6 +306,8 @@ def main_worker(gpu, ngpus_per_node, args):
         criterion = nn.MSELoss().cuda(args.gpu)
     elif args.losstype == "infonce":
         criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+    elif args.losstype == "softnn":
+        criterion = None
 
     optimizer = torch.optim.SGD(model.parameters(), init_lr,
                                 momentum=args.momentum,
@@ -426,7 +465,7 @@ def main_worker(gpu, ngpus_per_node, args):
     query_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size,
         shuffle=False, #(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
@@ -498,11 +537,11 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
         else:
-            raise NotImplementedError
             all_features = torch.cat([stolen_features, victim_features], dim=0)
-            # to be implemented
-            logits, labels = info_nce_loss(all_features)
-            loss = self.criterion(logits, labels)
+            logits, labels = info_nce_loss(all_features, args)
+            logits = logits.cuda(args.gpu, non_blocking=True)
+            labels = labels.cuda(args.gpu, non_blocking=True)
+            loss = criterion(logits, labels)
 
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
