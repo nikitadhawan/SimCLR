@@ -425,7 +425,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     query_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size,
-        shuffle=(train_sampler is None),
+        shuffle=False, #(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     if args.evaluate:

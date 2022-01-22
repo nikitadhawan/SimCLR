@@ -2,8 +2,6 @@ import os
 import shutil
 
 import torch
-import yaml
-import gdown
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
