@@ -251,7 +251,9 @@ def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
     if args.modeltype == "stolen":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+        # log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+        # logname = f"testing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
+        log_dir = "logs/"
         logname = f"testing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
         logging.basicConfig(
             filename=os.path.join(log_dir, logname),

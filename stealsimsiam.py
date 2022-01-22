@@ -28,6 +28,7 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import warnings
 from torch.utils.data import DataLoader
+from loss import soft_nn_loss_imagenet, pairwise_euclid_distance
 
 from models.resnet_simclr import ResNetSimCLRV2
 from utils import print_args
@@ -107,7 +108,7 @@ parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
 parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
-parser.add_argument('--temperaturesn', default=100, type=float,
+parser.add_argument('--temperaturesn', default=1000, type=float,
                     help='temperature for soft nearest neighbors loss')
 
 prefix = ''
@@ -307,7 +308,7 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.losstype == "infonce":
         criterion = nn.CrossEntropyLoss().cuda(args.gpu)
     elif args.losstype == "softnn":
-        criterion = None
+        criterion = soft_nn_loss_imagenet
 
     optimizer = torch.optim.SGD(model.parameters(), init_lr,
                                 momentum=args.momentum,
@@ -536,12 +537,17 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         stolen_features = model(images)
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
-        else:
+        elif args.losstype == "infonce":
             all_features = torch.cat([stolen_features, victim_features], dim=0)
             logits, labels = info_nce_loss(all_features, args)
             logits = logits.cuda(args.gpu, non_blocking=True)
             labels = labels.cuda(args.gpu, non_blocking=True)
             loss = criterion(logits, labels)
+
+        elif args.losstype == "softnn":
+            all_features = torch.cat([stolen_features, victim_features], dim=0)
+            loss = self.criterion(self.args, all_features,
+                                  pairwise_euclid_distance, args.temperaturesn)
 
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))

@@ -190,6 +190,57 @@ def soft_nn_loss(args,
     loss = -torch.mean(loss)
     return loss
 
+def soft_nn_loss_imagenet(args,
+                 features,
+                 distance,
+                 temperature=10000):
+    """Computes the soft nearest neighbors loss. Specifically for imagenet using stealsimsiam.py
+    Args:
+        labels: Labels associated with features. (now calculated in code below)
+        features: Embedded examples.
+        temperature: Controls relative importance given
+                        to the pair of points.
+    Returns:
+        loss: loss value for the current batch.
+    """
+
+    # Can possibly combine cross entropy with this loss (as mentioned in the paper)
+    batch_size = features.size()[0]
+    n = int(features.size()[0] / args.batch_size)
+    labels = torch.cat(
+            [torch.arange(args.batch_size) for i in range(n)], dim=0)
+    #labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    eps = 1e-9
+    pairwise_dist = distance(features, features)
+    pairwise_dist = pairwise_dist / temperature
+    negexpd = torch.exp(-pairwise_dist)
+
+    # Mask out diagonal entries
+    diag = torch.diag(torch.ones(batch_size, dtype=torch.bool))
+    diag_mask = torch.logical_not(diag).float()
+    negexpd = torch.mul(negexpd, diag_mask)
+
+    # creating mask to sample same class neighboorhood
+    pos_mask, _ = build_masks(labels, batch_size)
+    pos_mask = pos_mask.type(torch.FloatTensor)
+    #pos_mask = pos_mask.to(args.device)
+
+    # all class neighborhood
+    alcn = torch.sum(negexpd, dim=1)
+
+    # same class neighborhood
+    sacn = torch.sum(torch.mul(negexpd, pos_mask), dim=1)
+
+    # exclude examples with unique class from loss calculation
+    excl = torch.not_equal(torch.sum(pos_mask, dim=1),
+                             torch.zeros(batch_size)).cuda(args.gpu)
+    excl = excl.type(torch.FloatTensor).cuda(args.gpu)
+
+    loss = torch.divide(sacn, alcn)
+    loss = torch.multiply(torch.log(eps+loss), excl)
+    loss = -torch.mean(loss)
+    return loss
+
 # Supervised contrastive learning
 # https://arxiv.org/pdf/2004.11362.pdf
 # https://github.com/HobbitLong/SupContrast/blob/master/losses.py
