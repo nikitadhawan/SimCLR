@@ -28,6 +28,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 from torch.utils.data import  DataLoader
 import logging
+from models.resnet_simclr import ResNetSimCLRV2
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -90,8 +91,6 @@ parser.add_argument('--pretrained', default='', type=str,
                     help='path to simsiam pretrained checkpoint')
 parser.add_argument('--lars', action='store_true',
                     help='Use LARS')
-parser.add_argument('--modeltype', default='victim', type=str,
-                    help='Type of model to evaluate', choices=['victim', 'stolen'])
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochssteal', default=100, type=int, metavar='N',
@@ -250,17 +249,11 @@ def get_imagenet_data_loaders(shuffle=False, batch_size=256):
 def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
-    if args.modeltype == "stolen":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
-        logname = f"testing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
-        logging.basicConfig(
-            filename=os.path.join(log_dir, logname),
-            level=logging.DEBUG)
-    else:
-        logging.basicConfig(
-            filename=f"/checkpoint/akaleem/SimCLR/SimVIC/testing{args.dataset}.log",
-            level=logging.DEBUG)
-
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
+    logname = f"stealing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
+    logging.basicConfig(
+        filename=os.path.join(log_dir, logname),
+        level=logging.DEBUG)
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
         def print_pass(*args):
@@ -283,62 +276,47 @@ def main_worker(gpu, ngpus_per_node, args):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
         torch.distributed.barrier()
-    # create model
-    print("=> creating model '{}'".format(args.arch))
-    if args.dataset == "imagenet":
-        model = models.__dict__[args.arch]()
-    else:
-        model = models.__dict__[args.arch](num_classes=10)
+    # create models
+    print("=> loading model '{}'".format(args.arch))
 
-    # freeze all layers but the last fc
-    for name, param in model.named_parameters():
-        if name not in ['fc.weight', 'fc.bias']:
-            param.requires_grad = False
-    # init the fc layer
-    model.fc.weight.data.normal_(mean=0.0, std=0.01)
-    model.fc.bias.data.zero_()
+    victim_model = models.__dict__[args.arch]()
+    checkpoint = torch.load("models/resnet50SimSiam.pth.tar",
+                            map_location="cpu")
+    state_dict = checkpoint['state_dict']
+    for k in list(state_dict.keys()):
+        # retain only encoder up to before the embedding layer
+        if k.startswith('module.encoder') and not k.startswith(
+                'module.encoder.fc'):
+            # remove prefix
+            state_dict[k[len("module.encoder."):]] = state_dict[k]
+        # delete renamed or unused k
+        del state_dict[k]
+    # print("state dict", state_dict.keys())
+    victim_model.load_state_dict(state_dict, strict=False)
+    victim_model.fc = torch.nn.Identity()
 
-    # load from pre-trained, before DistributedDataParallel constructor
-    if args.pretrained:
-        if os.path.isfile(args.pretrained):
-            print("=> loading checkpoint '{}'".format(args.pretrained))
-            checkpoint = torch.load(args.pretrained, map_location="cpu")
+    # Stolen model initialzied
+    model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=512,
+                           loss=args.losstype, include_mlp=False)
 
-            # rename moco pre-trained keys
-            state_dict = checkpoint['state_dict']
-            for k in list(state_dict.keys()):
-                # retain only encoder up to before the embedding layer
-                if k.startswith('module.encoder') and not k.startswith('module.encoder.fc'):
-                    # remove prefix
-                    state_dict[k[len("module.encoder."):]] = state_dict[k]
-                # delete renamed or unused k
-                del state_dict[k]
 
-            args.start_epoch = 0
-            msg = model.load_state_dict(state_dict, strict=False)
-            assert set(msg.missing_keys) == {"fc.weight", "fc.bias"}
-
-            print("=> loaded pre-trained model '{}'".format(args.pretrained))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.pretrained))
-
-    if args.modeltype == "stolen":
-        checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
-            map_location="cpu")
-        state_dict = checkpoint['state_dict']
-        new_state_dict = {}
-        for k in list(state_dict.keys()):
-            if k.startswith('backbone.'):
-                if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                    # remove prefix
-                    new_state_dict[k[len("backbone."):]] = state_dict[k]
-            else:
-                new_state_dict[k] = state_dict[k]
-        args.start_epoch = 0
-        msg = model.load_state_dict(new_state_dict, strict=False)
-        assert set(msg.missing_keys) == {"fc.weight", "fc.bias"}
-        print("Loaded stolen model")
+    # if args.modeltype == "stolen":
+    #     checkpoint = torch.load(
+    #         f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
+    #         map_location="cpu")
+    #     state_dict = checkpoint['state_dict']
+    #     new_state_dict = {}
+    #     for k in list(state_dict.keys()):
+    #         if k.startswith('backbone.'):
+    #             if k.startswith('backbone') and not k.startswith('backbone.fc'):
+    #                 # remove prefix
+    #                 new_state_dict[k[len("backbone."):]] = state_dict[k]
+    #         else:
+    #             new_state_dict[k] = state_dict[k]
+    #     args.start_epoch = 0
+    #     msg = model.load_state_dict(new_state_dict, strict=False)
+    #     assert set(msg.missing_keys) == {"fc.weight", "fc.bias"}
+    #     print("Loaded stolen model")
     # infer learning rate before changing batch size
     init_lr = args.lr * args.batch_size / 256
 
@@ -349,20 +327,28 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.gpu is not None:
             torch.cuda.set_device(args.gpu)
             model.cuda(args.gpu)
+            victim_model.cuda(args.gpu)
             # When using a single GPU per process and per
             # DistributedDataParallel, we need to divide the batch size
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+            victim_model = torch.nn.parallel.DistributedDataParallel(victim_model,
+                                                              device_ids=[
+                                                                  args.gpu])
         else:
+            victim_model.cuda()
             model.cuda()
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
+            victim_model = torch.nn.parallel.DistributedDataParallel(victim_model)
+
     elif args.gpu is not None:
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
+        victim_model = victim_model.cuda(args.gpu)
     else:
         # DataParallel will divide and allocate batch_size to all available GPUs
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -370,15 +356,16 @@ def main_worker(gpu, ngpus_per_node, args):
             model.cuda()
         else:
             model = torch.nn.DataParallel(model).cuda()
+            victim_model = torch.nn.DataParallel(victim_model).cuda()
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+    if args.losstype == "mse":
+        criterion = nn.MSELoss().cuda(args.gpu)
+    elif args.losstype == "infonce":
+        criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-    # optimize only the linear classifier
-    parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-    assert len(parameters) == 2  # fc.weight, fc.bias
 
-    optimizer = torch.optim.SGD(parameters, init_lr,
+    optimizer = torch.optim.SGD(models.parameters(), init_lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
     if args.lars:
@@ -443,23 +430,35 @@ def main_worker(gpu, ngpus_per_node, args):
     #     ])),
     #     batch_size=256, shuffle=False,
     #     num_workers=args.workers, pin_memory=True)
-    if args.dataset == "cifar10":
-        train_dataset, train_loader, val_loader = get_cifar10_data_loaders(download=False)#, batch_size=args.batch_size)
-    elif args.dataset == "svhn":
-        train_dataset, train_loader, val_loader = get_svhn_data_loaders(download=False)
-    elif args.dataset == "stl10":
-        train_dataset, train_loader, val_loader = get_stl10_data_loaders(download=False)
+
+
+    # if args.dataset == "cifar10":
+    #     train_dataset, train_loader, val_loader = get_cifar10_data_loaders(download=False)#, batch_size=args.batch_size)
+    # elif args.dataset == "svhn":
+    #     train_dataset, train_loader, val_loader = get_svhn_data_loaders(download=False)
+    # elif args.dataset == "stl10":
+    #     train_dataset, train_loader, val_loader = get_stl10_data_loaders(download=False)
+    # else:
+    #     train_dataset, train_loader, val_loader = get_imagenet_data_loaders(batch_size=args.batch_size)
+    #
+
+    if args.datasetsteal == "cifar10":
+        query_dataset, query_loader, _ = get_cifar10_data_loaders(download=False)
+    elif args.datasetsteal == "svhn":
+        query_dataset, query_loader, _ = get_svhn_data_loaders(
+            download=False)
     else:
-        train_dataset, train_loader, val_loader = get_imagenet_data_loaders(batch_size=args.batch_size)
+        query_dataset, query_loader, _ = get_imagenet_data_loaders(
+            batch_size=args.batch_size)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
-            train_dataset)
+            query_dataset)
     else:
         train_sampler = None
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size,
+    query_loader = torch.utils.data.DataLoader(
+        query_dataset, batch_size=args.batch_size,
         shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
@@ -467,13 +466,14 @@ def main_worker(gpu, ngpus_per_node, args):
         validate(val_loader, model, criterion, args)
         return
 
+    victim_model.eval()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        # train for one epoch (stealing)
+        train(train_loader, model, victim_model, criterion, optimizer, epoch, args)
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
@@ -496,44 +496,44 @@ def main_worker(gpu, ngpus_per_node, args):
                     sanity_check(model.state_dict(), args.pretrained)
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    # top1 = AverageMeter('Acc@1', ':6.2f')
+    # top5 = AverageMeter('Acc@5', ':6.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
+        [batch_time, data_time, losses], #, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
-    """
-    Switch to eval mode:
-    Under the protocol of linear classification on frozen features/models,
-    it is not legitimate to change any part of the pre-trained model.
-    BatchNorm in train mode may revise running mean/std (even if it receives
-    no gradient), which are part of the model parameters too.
-    """
-    model.eval()
 
     end = time.time()
-    for i, (images, target) in enumerate(train_loader):
+    for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
-        target = target.cuda(args.gpu, non_blocking=True)
+
 
         # compute output
-        output = model(images)
-        loss = criterion(output, target)
+        victim_features = victim_model(images)
+        stolen_features = model(images)
+        if args.losstype == "mse":
+            loss = criterion(stolen_features, victim_features)
+        else:
+            raise NotImplementedError
+            all_features = torch.cat([stolen_features, victim_features], dim=0)
+            # to be implemented
+            logits, labels = info_nce_loss(all_features)
+            loss = self.criterion(logits, labels)
 
         # measure accuracy and record loss
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), images.size(0))
-        top1.update(acc1[0], images.size(0))
-        top5.update(acc5[0], images.size(0))
+        # acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        # losses.update(loss.item(), images.size(0))
+        # top1.update(acc1[0], images.size(0))
+        # top5.update(acc5[0], images.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
