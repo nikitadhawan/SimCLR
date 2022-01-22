@@ -45,7 +45,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                          ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=20, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=50, type=int, metavar='N',
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -199,6 +199,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # Stolen model initialzied
     model = ResNetSimCLRV2(base_model=args.arch, out_dim=512,
                            loss=args.losstype, include_mlp=False)
+
 
     # if args.modeltype == "stolen":
     #     checkpoint = torch.load(
@@ -483,6 +484,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
     end = time.time()
     num = 0
+    model.train()
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)

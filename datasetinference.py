@@ -261,10 +261,10 @@ for counter, (images, truelabels) in enumerate(
     stolenvictest.extend(dist.tolist())
 
 
-tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
-print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
-# tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
-# print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
+# tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
+# print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
+tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
+print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
 
 tval, pval = ttest(stolenvictest, stolenvicval, alternative="greater")
 print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ', pval)
