@@ -509,7 +509,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # is_best = acc1 > best_acc1
         # best_acc1 = max(acc1, best_acc1)
 
-        if epoch % 10 == 0:
+        if epoch % 10 == 0 or epoch == args.epochs - 1:
             save_checkpoint({
                 'epoch': epoch + 1,
                 'arch': args.arch,
