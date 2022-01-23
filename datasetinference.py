@@ -8,7 +8,7 @@ from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset
 from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
-from utils import load_victim, load_watermark, accuracy
+from utils import load_victim, load_watermark, accuracy, print_args
 import os
 from torchvision import models
 from tqdm import tqdm
@@ -98,6 +98,7 @@ parser.add_argument('--entropy', default='False', type=str,
 
 
 args = parser.parse_args()
+print_args(args)
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
@@ -109,7 +110,7 @@ train_loader = torch.utils.data.DataLoader(
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 dataset2 = RegularDataset(args.data)
-val_dataset = dataset2.get_dataset(args.dataset, 1)
+val_dataset = dataset.get_dataset(args.dataset, args.n_views)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
@@ -117,11 +118,15 @@ val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_dataset = dataset2.get_test_dataset(args.dataset,
-                                                 1)
-# indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-# test_dataset = torch.utils.data.Subset(test_dataset,
-#                                            indxs)
+test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
+
+#test_dataset = dataset2.get_test_dataset(args.dataset,
+                                             #    1)
+
+if args.datasetsteal == args.dataset:
+    indxs = list(range(len(test_dataset) - 1000, len(test_dataset))) # prevent overlap
+    test_dataset = torch.utils.data.Subset(test_dataset,
+                                               indxs)
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -210,6 +215,8 @@ else:
     random_model2 = load_victim(100, "cifar10", random_model2,
                                "resnet34", "infonce2",
                                device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+
+
 victim_model.eval()
 stolen_model.eval()
 random_model.eval()
@@ -217,69 +224,126 @@ random_model2.eval()
 
 randomvictrain = []
 stolenvictrain = []
-for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # On val loader .
+
+victrain = []
+randomtrain = []
+stolentrain = []
+
+
+for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # Augmented train loader with two views for each image
     images = torch.cat(images, dim=0)
     images = images.to(device)
-    victim_features = victim_model(images)
-    stolen_features = stolen_model(images)
-    random_features2 = random_model2(images)
-    dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
-    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
-    randomvictrain.extend(dist3.tolist())
-    stolenvictrain.extend(dist.tolist())
-    if counter >= 20:
+    # Get features from all models on two augmentations of an image and compute their difference
+    x1 = images[:int(len(images) / 2)]
+    x2 = images[int(len(images) / 2):]
+    victim_features1 = victim_model(x1)
+    victim_features2 = victim_model(x2)
+    random_features1 = random_model2(x1)
+    random_features2 = random_model2(x2)
+    stolen_features1 = stolen_model(x1)
+    stolen_features2 = stolen_model(x2)
+    distv = (victim_features1 - victim_features2).pow(2).sum(1).sqrt()
+    distr = (random_features1 - random_features2).pow(2).sum(1).sqrt()
+    dists = (stolen_features1 - stolen_features2).pow(2).sum(1).sqrt()
+    victrain.extend(distv.tolist())
+    randomtrain.extend(distr.tolist())
+    stolentrain.extend(dists.tolist())
+    # victim_features = victim_model(images)
+    # stolen_features = stolen_model(images)
+    # random_features2 = random_model2(images)
+    # dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+    # dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+    # randomvictrain.extend(dist3.tolist())
+    # stolenvictrain.extend(dist.tolist())
+    # if counter >= 100:
+    #     break
+
+victest = []
+randomtest = []
+stolentest = []
+
+for counter, (images, truelabels) in enumerate(
+        tqdm(test_loader)):  # Augmented test loader with two views for each image
+    images = torch.cat(images, dim=0)
+    images = images.to(device)
+    # Get features from all models on two augmentations of an image and compute their difference
+    x1 = images[:int(len(images) / 2)]
+    x2 = images[int(len(images) / 2):]
+    victim_features1 = victim_model(x1)
+    victim_features2 = victim_model(x2)
+    random_features1 = random_model2(x1)
+    random_features2 = random_model2(x2)
+    stolen_features1 = stolen_model(x1)
+    stolen_features2 = stolen_model(x2)
+    distv = (victim_features1 - victim_features2).pow(2).sum(1).sqrt()
+    distr = (random_features1 - random_features2).pow(2).sum(1).sqrt()
+    dists = (stolen_features1 - stolen_features2).pow(2).sum(1).sqrt()
+    victest.extend(distv.tolist())
+    randomtest.extend(distr.tolist())
+    stolentest.extend(dists.tolist())
+    if counter >= 100:
         break
 
 
-randomvicval = []
-stolenvicval = []
-for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # On val loader .
-    images = torch.cat(images, dim=0)
-    images = images.to(device)
-    victim_features = victim_model(images)
-    stolen_features = stolen_model(images)
-    random_features2 = random_model2(images)
-    dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
-    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
-    randomvicval.extend(dist3.tolist())
-    stolenvicval.extend(dist.tolist())
+print(f"Victim differences: Train {np.mean(victrain)}+-{np.std(victrain)},   Test {np.mean(victest)}+-{np.std(victest)} ")
+print(f"Random differences: Train {np.mean(randomtrain)}+-{np.std(randomtrain)},   Test {np.mean(randomtest)}+-{np.std(randomtest)} ")
+print(f"Stolen differences: Train {np.mean(stolentrain)}+-{np.std(stolentrain)},   Test {np.mean(stolentest)}+-{np.std(stolentest)}")
 
+tval, pval = ttest(victrain, randomtrain, alternative="greater")
+print('Null hypothesis vicdiff_train <= randomdiff_train ', ' pval: ', pval)
 
-randomvictest = []
-stolenvictest = []
+tval, pval = ttest(victrain, stolentrain, alternative="greater")
+print('Null hypothesis vicdiff_train == stolendiff_train ', ' pval: ', pval)
 
-for counter, (images, truelabels) in enumerate(
-        tqdm(test_loader)):  # On test loader .
-    images = torch.cat(images, dim=0)
-    images = images.to(device)
-    victim_features = victim_model(images)
-    stolen_features = stolen_model(images)
-    random_features2 = random_model2(images)
-    dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
-    dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
-    randomvictest.extend(dist3.tolist())
-    stolenvictest.extend(dist.tolist())
-
-
-# tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
-# print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
-tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
-print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
-
-tval, pval = ttest(stolenvictest, stolenvicval, alternative="greater")
-print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ', pval)
-
-
-
-
-print("random_val", np.mean(randomvicval))
-print("random_val var", np.var(randomvicval))
-print("random2_test", np.mean(randomvictest))
-print("random2_test var", np.var(randomvictest))
-print("random2_train", np.mean(randomvictrain))
-print("stolen1_val", np.mean(stolenvicval))
-print("stolen2_test", np.mean(stolenvictest))
-print("stolen2_train", np.mean(stolenvictrain))
+# randomvicval = []
+# stolenvicval = []
+# for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # On val loader .
+#     images = torch.cat(images, dim=0)
+#     images = images.to(device)
+#     victim_features = victim_model(images)
+#     stolen_features = stolen_model(images)
+#     random_features2 = random_model2(images)
+#     dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+#     dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+#     randomvicval.extend(dist3.tolist())
+#     stolenvicval.extend(dist.tolist())
+#
+#
+# randomvictest = []
+# stolenvictest = []
+#
+# for counter, (images, truelabels) in enumerate(
+#         tqdm(test_loader)):  # On test loader .
+#     images = torch.cat(images, dim=0)
+#     images = images.to(device)
+#     victim_features = victim_model(images)
+#     stolen_features = stolen_model(images)
+#     random_features2 = random_model2(images)
+#     dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
+#     dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
+#     randomvictest.extend(dist3.tolist())
+#     stolenvictest.extend(dist.tolist())
+#
+#
+# # tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
+# # print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
+# tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
+# print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
+#
+# tval, pval = ttest(stolenvictest, stolenvicval, alternative="greater")
+# print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ', pval)
+#
+#
+#
+#
+# print("random_val", np.mean(randomvicval))
+# print("random_val var", np.var(randomvicval))
+# print("random2_test", np.mean(randomvictest))
+# print("random2_test var", np.var(randomvictest))
+# print("random2_train", np.mean(randomvictrain))
+# print("stolen1_val", np.mean(stolenvicval))
+# print("stolen2_test", np.mean(stolenvictest))
+# print("stolen2_train", np.mean(stolenvictrain))
 
 #### Previous approach
 # randomvic = []
