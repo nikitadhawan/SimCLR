@@ -24,7 +24,7 @@ class GaussianBlur(object):
         )
 
     def __call__(self, img):
-        
+
         sigma = np.random.uniform(0.1, 2.0)
         x = np.arange(-self.r, self.r + 1)
         x = np.exp(-np.power(x, 2) / (2 * sigma * sigma))
