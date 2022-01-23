@@ -556,19 +556,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         train_sampler = None
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
-    val_loader = torch.utils.data.DataLoader(
-        datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])),
-        batch_size=256, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
     # if args.dataset == "cifar10":
     #     train_dataset, train_loader, val_loader = get_cifar10_data_loaders(download=False)#, batch_size=args.batch_size)
     # elif args.dataset == "svhn":
