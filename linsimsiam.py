@@ -267,7 +267,7 @@ def main_worker(gpu, ngpus_per_node, args):
             log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/"
         else:
             log_dir = "logs/"
-        logname = f"testing{args.datasetsteal}{args.num_queries}{args.losstype}.log"
+        logname = f"testing{args.datasetsteal}{args.num_queries}{args.losstype}{args.dataset}.log"
         logging.basicConfig(
             filename=os.path.join(log_dir, logname),
             level=logging.DEBUG)
