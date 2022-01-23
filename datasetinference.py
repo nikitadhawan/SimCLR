@@ -1,4 +1,8 @@
 # Dataset inference approach to compare the distance between representations over the training set samples.
+
+# Can run with regular augmentations or a victim trained with watermarks.
+
+# For watermarks: python datasetinference.py --arch 'resnet18' --watermark 'True'
 import argparse
 import torch
 import torch.nn as nn
@@ -104,13 +108,21 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 dataset = ContrastiveLearningDataset(args.data) # RegularDataset(args.data) #
+dataset2 = RegularDataset(args.data)
+watermark_dataset = WatermarkDataset(args.data)
 train_dataset = dataset.get_dataset(args.dataset,  args.n_views) # this is the dataset the victim was trained on.
 train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-dataset2 = RegularDataset(args.data)
-val_dataset = dataset.get_dataset(args.dataset, args.n_views)
+
+### Task with rotations
+if args.watermark == "True":
+    val_dataset = watermark_dataset.get_dataset(
+        args.dataset, args.n_views)
+else:
+    val_dataset = dataset.get_dataset(args.dataset, args.n_views)
+
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
@@ -118,10 +130,15 @@ val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
+if args.watermark == "True":
+    test_dataset = watermark_dataset.get_test_dataset(args.dataset, args.n_views)
+else:
+    test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
 
-#test_dataset = dataset2.get_test_dataset(args.dataset,
-                                             #    1)
+
+
+
+#test_dataset = dataset2.get_test_dataset(args.dataset, 1)
 
 if args.datasetsteal == args.dataset:
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset))) # prevent overlap
@@ -230,7 +247,7 @@ randomtrain = []
 stolentrain = []
 
 
-for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # Augmented train loader with two views for each image
+for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # Augmented train loader with two views for each image (could be augmentation or rotation)
     images = torch.cat(images, dim=0)
     images = images.to(device)
     # Get features from all models on two augmentations of an image and compute their difference
@@ -294,6 +311,9 @@ print('Null hypothesis vicdiff_train <= randomdiff_train ', ' pval: ', pval)
 
 tval, pval = ttest(victrain, stolentrain, alternative="greater")
 print('Null hypothesis vicdiff_train == stolendiff_train ', ' pval: ', pval)
+
+tval, pval = ttest(stolentrain, randomtrain, alternative="greater")
+print('Null hypothesis stolendiff_train <= randomdiff_train ', ' pval: ', pval)
 
 # randomvicval = []
 # stolenvicval = []

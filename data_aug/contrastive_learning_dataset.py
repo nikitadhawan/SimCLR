@@ -242,6 +242,41 @@ class WatermarkDataset:
                                                           download=True),
                           'svhn': lambda: datasets.SVHN(
                               self.root_folder + "/SVHN",
+                              split='train',
+                              transform=WatermarkViewGenerator(
+                                  self.get_transform(),
+                                  n_views),
+                              download=True),
+                          'imagenet': lambda: datasets.ImageNet(
+                              root="/scratch/ssd002/datasets/imagenet256/",
+                              split='train',
+                              transform=WatermarkViewGenerator(
+                                  self.get_imagenet_transform(
+                                      32),
+                                  n_views))
+                          }
+
+        try:
+            dataset_fn = valid_datasets[name]
+        except KeyError:
+            raise InvalidDatasetSelection()
+        else:
+            return dataset_fn()
+
+    def get_test_dataset(self, name, n_views):
+        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=False,
+                                                              transform=WatermarkViewGenerator(
+                                                                  self.get_transform(),
+                                                                  n_views),
+                                                              download=False),
+
+                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
+                                                          transform=WatermarkViewGenerator(
+                                                              self.get_transform(),
+                                                              n_views),
+                                                          download=False),
+                          'svhn': lambda: datasets.SVHN(
+                              self.root_folder + "/SVHN",
                               split='test',
                               transform=WatermarkViewGenerator(
                                   self.get_transform(),
