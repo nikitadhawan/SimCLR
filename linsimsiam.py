@@ -552,11 +552,11 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset = datasets.STL10(
             stl_path, split='train',
             download=False,transform=transform_train)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size,
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                                 num_workers=0, drop_last=False, shuffle=True)
         test_dataset = datasets.STL10(stl_path, split='test', download=False,
                                       transform=transform_test)
-        val_loader = DataLoader(test_dataset, batch_size=batch_size,
+        val_loader = DataLoader(test_dataset, batch_size=args.batch_size,
                                 num_workers=2, drop_last=False, shuffle=False)
 
     elif args.dataset == 'svhn':
