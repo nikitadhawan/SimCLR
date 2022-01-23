@@ -116,6 +116,8 @@ parser.add_argument('--num_queries', default=50000, type=int, metavar='N',
                     help='number of queries to steal with with')
 parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use.')
+parser.add_argument('--useval', default='False', type=str,
+                    help='Use validation set for stealing (only with imagenet)')
 parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
 parser.add_argument('--temperature', default=0.07, type=float,
@@ -379,15 +381,22 @@ def main_worker(gpu, ngpus_per_node, args):
                 normalize,
             ]))
 
-        val_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, transforms.Compose([
+        val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
+            ]))
+
+        # val_loader = torch.utils.data.DataLoader(
+        #     datasets.ImageFolder(valdir, transforms.Compose([
+        #         transforms.Resize(256),
+        #         transforms.CenterCrop(224),
+        #         transforms.ToTensor(),
+        #         normalize,
+        #     ])),
+        #     batch_size=args.batch_size, shuffle=False,
+        #     num_workers=args.workers, pin_memory=True)
 
     elif args.datasetsteal == 'cifar10':
         transform_train = transforms.Compose([
@@ -483,10 +492,16 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         train_sampler = None
 
-    query_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size,
-        shuffle=False, #(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+    if args.useval == "True" and args.dataset == "imagenet":
+        query_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=args.batch_size,
+            shuffle=False, #(train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+    else:
+        query_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size,
+            shuffle=False, #(train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
