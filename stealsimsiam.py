@@ -658,7 +658,7 @@ def save_checkpoint(state, is_best, args):
         uname = getpass.getuser()
         if uname == "akaleem":
             torch.save(state,
-                       f"/checkpoint/akaleem/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
+                       f"/checkpoint/akaleem/SimCLR/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
         else:
             torch.save(state,
                        f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
