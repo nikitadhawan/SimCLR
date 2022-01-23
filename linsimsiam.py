@@ -307,6 +307,8 @@ def main_worker(gpu, ngpus_per_node, args):
     print("=> creating model '{}'".format(args.arch))
     if args.dataset == "imagenet":
         model = models.__dict__[args.arch]()
+    elif args.dataset == "cifar100":
+        model = models.__dict__[args.arch](num_classes=100)
     else:
         model = models.__dict__[args.arch](num_classes=10)
 
