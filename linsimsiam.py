@@ -273,9 +273,14 @@ def main_worker(gpu, ngpus_per_node, args):
             filename=os.path.join(log_dir, logname),
             level=logging.DEBUG)
     else:
-        logging.basicConfig(
-            filename=f"/checkpoint/akaleem/SimCLR/SimVIC/testing{args.dataset}.log",
-            level=logging.DEBUG)
+        if user == "akaleem":
+            logging.basicConfig(
+                filename=f"/checkpoint/akaleem/SimCLR/SimVIC/testing{args.dataset}.log",
+                level=logging.DEBUG)
+        else:
+            logging.basicConfig(
+                filename=f"logs/testing{args.dataset}victim.log",
+                level=logging.DEBUG)
 
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
