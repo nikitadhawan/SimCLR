@@ -562,8 +562,8 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.dataset == 'svhn':
 
         transform_svhn = transforms.Compose([
-            transforms.ToTensor(),
             transforms.Resize(224),
+            transforms.ToTensor(),
         ])
 
         train_dataset = datasets.SVHN(
