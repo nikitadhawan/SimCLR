@@ -41,7 +41,7 @@ if user == 'akaleem':
     prefix = '/ssd003'
 else:
     prefix = ''
-    user = 'nicolas'
+    #user = 'nicolas'
 
 
 
