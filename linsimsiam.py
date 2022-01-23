@@ -37,7 +37,7 @@ if user == 'akaleem':
     prefix = '/ssd003'
 else:
     prefix = ''
-    user = 'nicolas'
+    #user = 'nicolas'
 
 
 model_names = sorted(name for name in models.__dict__
@@ -139,7 +139,6 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
-    print("ng", ngpus_per_node)
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -358,10 +357,10 @@ def main_worker(gpu, ngpus_per_node, args):
         state_dict = checkpoint['state_dict']
         new_state_dict = {}
         for k in list(state_dict.keys()):
-            if k.startswith('backbone.'):
-                if k.startswith('backbone') and not k.startswith('backbone.fc'):
+            if k.startswith('module.backbone.'):
+                if k.startswith('module.backbone.') and not k.startswith('module.backbone.fc'):
                     # remove prefix
-                    new_state_dict[k[len("backbone."):]] = state_dict[k]
+                    new_state_dict[k[len("module.backbone."):]] = state_dict[k]
             else:
                 new_state_dict[k] = state_dict[k]
         args.start_epoch = 0
@@ -517,14 +516,14 @@ def main_worker(gpu, ngpus_per_node, args):
         ])
 
         train_dataset = datasets.CIFAR100(
-            root=f'{prefix}/home/nicolas/data/cifar100', train=True,
+            root=f'{prefix}/home/{user}/data/cifar100', train=True,
             download=True, transform=transform_train)
         trainloader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size, shuffle=True,
             num_workers=args.workers)
 
         test_dataset = datasets.CIFAR100(
-            root=f'{prefix}/home/nicolas/data/cifar100', train=False,
+            root=f'{prefix}/home/{user}/data/cifar100', train=False,
             download=True, transform=transform_test)
         val_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=args.batch_size, shuffle=False,
@@ -538,13 +537,13 @@ def main_worker(gpu, ngpus_per_node, args):
         ])
 
         train_dataset = datasets.SVHN(
-            root=f'{prefix}/home/nicolas/data/svhn', split='train',
+            root=f'{prefix}/home/{user}/data/svhn', split='train',
             download=False, transform=transform_svhn)
         train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size,
             num_workers=args.workers, drop_last=False, shuffle=True)
         test_dataset = datasets.SVHN(
-            f'{prefix}/home/nicolas/data/svhn', split='test', download=False,
+            f'{prefix}/home/{user}/data/svhn', split='test', download=False,
             transform=transform_svhn)
         val_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=args.batch_size, shuffle=False,
