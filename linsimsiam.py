@@ -52,7 +52,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=20, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=30, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -150,110 +150,110 @@ def main():
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
 
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465),
-                             (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
+# def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
+#     transform_train = transforms.Compose([
+#         transforms.RandomCrop(32, padding=4),
+#         transforms.RandomHorizontalFlip(),
+#         transforms.ToTensor(),
+#         transforms.Normalize((0.4914, 0.4822, 0.4465),
+#                              (0.2023, 0.1994, 0.2010)),
+#         transforms.Resize(224),
+#     ])
+#
+#     transform_test = transforms.Compose([
+#         transforms.ToTensor(),
+#         transforms.Normalize((0.4914, 0.4822, 0.4465),
+#                              (0.2023, 0.1994, 0.2010)),
+#         transforms.Resize(224),
+#     ])
+#     train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
+#                                   transform=transform_train)
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                             num_workers=0, drop_last=False, shuffle=shuffle)
+#     test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
+#                                   transform=transform_test)
+#     # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+#     # test_dataset = torch.utils.data.Subset(test_dataset,
+#     #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+#     test_loader = DataLoader(test_dataset, batch_size=batch_size,
+#                             num_workers=2, drop_last=False, shuffle=shuffle)
+#     return train_dataset, train_loader, test_loader
 
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465),
-                             (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-    train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
-                                  transform=transform_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=False, download=download,
-                                  transform=transform_test)
-    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_svhn_data_loaders(download, shuffle=False, batch_size=256):
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        # transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                      (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        # transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                      (0.2023, 0.1994, 0.2010)),
-        transforms.Resize(224),
-    ])
-    train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
-                                  split='train', download=download,
-                                  transform=transform_train)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test',
-                                 download=download,
-                                 transform=transform_test)
-    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_stl10_data_loaders(download, dataset = None, shuffle=False, batch_size=256):
-    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
-                                  transform=transforms.ToTensor())
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
-                                  transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
-
-def get_imagenet_data_loaders(shuffle=False, batch_size=256):
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    preprocessing = [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        normalize,
-    ]
-    train_dataset = datasets.ImageNet(
-        root="/scratch/ssd002/datasets/imagenet256/",   #Path for imagenet on Vector cluster
-        split = "train",
-        transform=transforms.Compose(preprocessing)
-    )
-    test_dataset = datasets.ImageNet(
-        root="/scratch/ssd002/datasets/imagenet256/",
-        # Path for imagenet on Vector cluster
-        split="val",
-        transform=transforms.Compose(preprocessing)
-    )
-
-    # indxstest = random.sample(range(0, len(test_dataset)), 10000)
-    # indxstrain = random.sample(range(0, len(train_dataset)), 50000)
-    # test_dataset = torch.utils.data.Subset(test_dataset,
-    #                                        indxstest)
-    # train_dataset = torch.utils.data.Subset(train_dataset,
-    #                                         indxstrain)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=False, shuffle=shuffle)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                             drop_last=False, shuffle=shuffle)
-    return train_dataset, train_loader, test_loader
+# def get_svhn_data_loaders(download, shuffle=False, batch_size=256):
+#     transform_train = transforms.Compose([
+#         transforms.RandomCrop(32, padding=4),
+#         transforms.RandomHorizontalFlip(),
+#         transforms.ToTensor(),
+#         # transforms.Normalize((0.4914, 0.4822, 0.4465),
+#         #                      (0.2023, 0.1994, 0.2010)),
+#         transforms.Resize(224),
+#     ])
+#
+#     transform_test = transforms.Compose([
+#         transforms.ToTensor(),
+#         # transforms.Normalize((0.4914, 0.4822, 0.4465),
+#         #                      (0.2023, 0.1994, 0.2010)),
+#         transforms.Resize(224),
+#     ])
+#     train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
+#                                   split='train', download=download,
+#                                   transform=transform_train)
+#
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                             num_workers=0, drop_last=False, shuffle=shuffle)
+#     test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test',
+#                                  download=download,
+#                                  transform=transform_test)
+#     # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+#     # test_dataset = torch.utils.data.Subset(test_dataset,
+#     #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+#     test_loader = DataLoader(test_dataset, batch_size=batch_size,
+#                             num_workers=2, drop_last=False, shuffle=shuffle)
+#     return train_dataset, train_loader, test_loader
+#
+# def get_stl10_data_loaders(download, dataset = None, shuffle=False, batch_size=256):
+#     train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
+#                                   transform=transforms.ToTensor())
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                             num_workers=0, drop_last=False, shuffle=shuffle)
+#     test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
+#                                   transform=transforms.ToTensor())
+#     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
+#                             num_workers=2, drop_last=False, shuffle=shuffle)
+#     return train_dataset, train_loader, test_loader
+#
+# def get_imagenet_data_loaders(shuffle=False, batch_size=256):
+#     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+#                                      std=[0.229, 0.224, 0.225])
+#     preprocessing = [
+#         transforms.Resize(256),
+#         transforms.CenterCrop(224),
+#         transforms.ToTensor(),
+#         normalize,
+#     ]
+#     train_dataset = datasets.ImageNet(
+#         root="/scratch/ssd002/datasets/imagenet256/",   #Path for imagenet on Vector cluster
+#         split = "train",
+#         transform=transforms.Compose(preprocessing)
+#     )
+#     test_dataset = datasets.ImageNet(
+#         root="/scratch/ssd002/datasets/imagenet256/",
+#         # Path for imagenet on Vector cluster
+#         split="val",
+#         transform=transforms.Compose(preprocessing)
+#     )
+#
+#     # indxstest = random.sample(range(0, len(test_dataset)), 10000)
+#     # indxstrain = random.sample(range(0, len(train_dataset)), 50000)
+#     # test_dataset = torch.utils.data.Subset(test_dataset,
+#     #                                        indxstest)
+#     # train_dataset = torch.utils.data.Subset(train_dataset,
+#     #                                         indxstrain)
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                               drop_last=False, shuffle=shuffle)
+#     test_loader = DataLoader(test_dataset, batch_size=batch_size,
+#                              drop_last=False, shuffle=shuffle)
+#     return train_dataset, train_loader, test_loader
 
 
 
@@ -551,11 +551,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     else:
         raise Exception(f"Unknown args.datasetsteal: {args.datasetsteal}.")
-    # if args.distributed:
-    #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    # else:
-    #     train_sampler = None
-    #
+    if args.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    else:
+        train_sampler = None
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
