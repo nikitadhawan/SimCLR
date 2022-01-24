@@ -537,15 +537,20 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.Resize(224),
             transforms.ToTensor(),
         ])
+        if user == "akaleem":
+            svhn_path = f'/ssd003/home/{user}/data/SVHN'
+        else:
+            svhn_path = f'{prefix}/home/{user}/data/svhn'
+
 
         train_dataset = datasets.SVHN(
-            root=f'{prefix}/home/{user}/data/svhn', split='train',
+            root=svhn_path, split='train',
             download=False, transform=transform_svhn)
         train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size,
             num_workers=args.workers, drop_last=False, shuffle=True)
         test_dataset = datasets.SVHN(
-            f'{prefix}/home/{user}/data/svhn', split='test', download=False,
+            svhn_path, split='test', download=False,
             transform=transform_svhn)
         val_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=args.batch_size, shuffle=False,
