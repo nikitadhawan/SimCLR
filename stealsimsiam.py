@@ -617,7 +617,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
             augment_images.append(aug_image)
 
         augment_images = torch.stack(augment_images)
-        augment_images = augment_images.to(device)
+        if args.gpu is not None:
+            augment_images = augment_images.cuda(args.gpu, non_blocking=True)
         stolen_features = model(augment_images)
         #stolen_features = model(images)
 
