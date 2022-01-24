@@ -609,6 +609,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         # compute output
         victim_features = victim_model(images)
+        augment_images = []
         for image in images:
             aug_image = to_pil(image)
             aug_image = data_transforms(aug_image)
