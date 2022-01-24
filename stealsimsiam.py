@@ -31,6 +31,7 @@ import torchvision.transforms as transforms
 import warnings
 from torch.utils.data import DataLoader
 from loss import soft_nn_loss_imagenet, pairwise_euclid_distance
+from data_aug.gaussian_blur import GaussianBlur
 
 from models.resnet_simclr import ResNetSimCLRV2
 from utils import print_args
@@ -183,6 +184,7 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+    print("# gpus", ngpus_per_node)
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
