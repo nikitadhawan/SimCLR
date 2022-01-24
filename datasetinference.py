@@ -1,32 +1,42 @@
 # Dataset inference approach to compare the distance between representations over the training set samples.
 import argparse
+import os
+from getpass import getuser
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.models
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
-    RegularDataset, WatermarkDataset
-from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
-from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
-from utils import load_victim, load_watermark, accuracy
-import os
 from torchvision import models
 from tqdm import tqdm
-from statistical_tests.t_test import ttest
-import numpy as np
 
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
+    RegularDataset
+from models.resnet_simclr import ResNetSimCLRV2
+from models.resnet_wider import resnet50rep
+from statistical_tests.t_test import ttest
+from utils import load_victim
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
                      and callable(models.__dict__[name]))
 
+user = getuser()
+
+if user == 'ahmad':
+    prefix = '/ssd003'
+else:
+    prefix = ''
+
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR',
+                    default=f'{prefix}/home/{user}/data',
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
+                    help='dataset name',
+                    choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
+                    help='dataset used for querying the victim',
+                    choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
                     help='model architecture: ' +
@@ -51,7 +61,7 @@ parser.add_argument('-b', '--batch-size', default=64, type=int,
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', type=float, default=0.9,
-                        help='momentum')
+                    help='momentum')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
@@ -70,7 +80,8 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations.
+parser.add_argument('--n-views', default=2, type=int, metavar='N',
+                    # use 2 to use multiple augmentations.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--logdir', default='test', type=str,
@@ -80,11 +91,14 @@ parser.add_argument('--losstype', default='mse', type=str,
 parser.add_argument('--lossvictim', default='infonce', type=str,
                     help='Loss function victim was trained with')
 parser.add_argument('--victimhead', default='False', type=str,
-                    help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
+                    help='Access to victim head while (g) while getting representations',
+                    choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
-                    help='Use an additional head while training the stolen model.', choices=['True', 'False'])
+                    help='Use an additional head while training the stolen model.',
+                    choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
-                    help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+                    help='Use defence on the victim side by perturbing outputs',
+                    choices=['True', 'False'])
 parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
 parser.add_argument('--mu', default=5, type=float,
@@ -92,39 +106,42 @@ parser.add_argument('--mu', default=5, type=float,
 parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
-                    help='Evaluate with watermark model from victim', choices=['True', 'False'])
+                    help='Evaluate with watermark model from victim',
+                    choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Use entropy victim model', choices=['True', 'False'])
-
 
 args = parser.parse_args()
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-dataset = ContrastiveLearningDataset(args.data) # RegularDataset(args.data) #
-train_dataset = dataset.get_dataset(args.dataset,  args.n_views) # this is the dataset the victim was trained on.
+dataset = ContrastiveLearningDataset(args.data)  # RegularDataset(args.data) #
+train_dataset = dataset.get_dataset(args.dataset,
+                                    args.n_views)  # this is the dataset the victim was trained on.
 train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+    train_dataset, batch_size=args.batch_size, shuffle=False,
+    num_workers=args.workers, pin_memory=True, drop_last=True)
 
 dataset2 = RegularDataset(args.data)
 val_dataset = dataset2.get_dataset(args.dataset, 1)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
-                                           indxs)
+                                      indxs)
 val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+    val_dataset, batch_size=args.batch_size, shuffle=False,
+    num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_dataset = dataset2.get_test_dataset(args.dataset,
-                                                 1)
+test_dataset = dataset2.get_test_dataset(args.dataset, 1)
 # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
 # test_dataset = torch.utils.data.Subset(test_dataset,
 #                                            indxs)
 test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+    test_dataset, batch_size=args.batch_size, shuffle=False,
+    num_workers=args.workers, pin_memory=True, drop_last=True)
+
+
+
 criterion2 = nn.CosineSimilarity(dim=1)
 
 if args.dataset == "imagenet":
@@ -148,8 +165,6 @@ else:
                                args.arch, args.lossvictim,
                                device=device)
 
-
-
 # Load stolen copy
 if args.dataset == "imagenet":
     stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=512, loss=None,
@@ -159,11 +174,10 @@ else:
                                   include_mlp=False).to(device)
 # mse loss for victim for first tests.
 checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
-            map_location=device)
+    f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
+    map_location=device)
 state_dict = checkpoint['state_dict']
 stolen_model.load_state_dict(state_dict)
-
 
 # checkpoint2 = torch.load(
 #             f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18infonceTRAIN/cifar10_checkpoint_100_infonceWATERMARK.pth.tar",
@@ -181,9 +195,10 @@ if args.dataset == "imagenet":
             return x
 
 
-    random_model= resnet50rep().to(device)
+    random_model = resnet50rep().to(device)
     checkpoint = torch.load(
-            f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+        f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth',
+        map_location=device)
     state_dict = checkpoint['state_dict']
     new_state_dict = state_dict.copy()
     # for k in state_dict.keys():
@@ -198,18 +213,22 @@ else:
     #             map_location=device)
     #
     # random_dict = checkpoint2['state_dict']
-    random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
-    #random_model.load_state_dict(random_dict)
-    random_model = load_victim(50, "cifar10", random_model,
-                                   "resnet18", "infonce",
-                                   device=device, discard_mlp=True)
-
-    random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
+    random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None,
                                   include_mlp=False).to(
+        device)  # Note: out_dim does not matter since last layer has no effect.
+    # random_model.load_state_dict(random_dict)
+    random_model = load_victim(50, "cifar10", random_model,
+                               "resnet18", "infonce",
+                               device=device, discard_mlp=True)
+
+    random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128,
+                                   loss=None,
+                                   include_mlp=False).to(
         device)
     random_model2 = load_victim(100, "cifar10", random_model2,
-                               "resnet34", "infonce2",
-                               device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+                                "resnet34", "infonce2",
+                                device=device,
+                                discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
 victim_model.eval()
 stolen_model.eval()
 random_model.eval()
@@ -217,7 +236,8 @@ random_model2.eval()
 
 randomvictrain = []
 stolenvictrain = []
-for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # On val loader .
+for counter, (images, truelabels) in enumerate(
+        tqdm(train_loader)):  # On val loader .
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
@@ -230,10 +250,10 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # On val loa
     if counter >= 20:
         break
 
-
 randomvicval = []
 stolenvicval = []
-for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # On val loader .
+for counter, (images, truelabels) in enumerate(
+        tqdm(val_loader)):  # On val loader .
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
@@ -243,7 +263,6 @@ for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # On val loade
     dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
     randomvicval.extend(dist3.tolist())
     stolenvicval.extend(dist.tolist())
-
 
 randomvictest = []
 stolenvictest = []
@@ -260,17 +279,15 @@ for counter, (images, truelabels) in enumerate(
     randomvictest.extend(dist3.tolist())
     stolenvictest.extend(dist.tolist())
 
-
 # tval, pval = ttest(randomvicval, randomvictest, alternative="two.sided")
 # print('Null hypothesis dist(D_v) == dist(D_t) for random model. ', tval, ' pval: ', pval)
 tval, pval = ttest(randomvictest, randomvicval, alternative="greater")
-print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ', pval)
+print('Null hypothesis dist(D_t) <= dist(D_v) for random model. ', ' pval: ',
+      pval)
 
 tval, pval = ttest(stolenvictest, stolenvicval, alternative="greater")
-print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ', pval)
-
-
-
+print('Null hypothesis dist(D_t) <= dist(D_v) for stolen model. ', ' pval: ',
+      pval)
 
 print("random_val", np.mean(randomvicval))
 print("random_val var", np.var(randomvicval))
@@ -322,4 +339,3 @@ print("stolen2_train", np.mean(stolenvictrain))
 # tval, pval = ttest(randomvic, stolenvic, alternative="greater")
 # print('Null hypothesis dist(vic, M1) <= dist(vic, stolen): ', ' pval: ', pval)
 #
-

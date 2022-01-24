@@ -5,16 +5,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import getpass
-
 import argparse
 import builtins
+import getpass
 import logging
 import math
 import os
 import random
-import shutil
 import time
+import warnings
+
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -28,10 +28,9 @@ import torch.utils.data.distributed
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.transforms as transforms
-import warnings
-from torch.utils.data import DataLoader
-from loss import soft_nn_loss_imagenet, pairwise_euclid_distance
 
+from data_aug.gaussian_blur import GaussianBlur
+from loss import soft_nn_loss_imagenet, pairwise_euclid_distance
 from models.resnet_simclr import ResNetSimCLRV2
 from utils import print_args
 
@@ -41,9 +40,7 @@ if user == 'akaleem':
     prefix = '/ssd003'
 else:
     prefix = ''
-    #user = 'nicolas'
-
-
+    # user = 'nicolas'
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -57,7 +54,8 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: ' +
                          ' | '.join(model_names) +
                          ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=20, type=int, metavar='N',
+parser.add_argument('-j', '--workers', type=int, metavar='N',
+                    default=20,
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -66,6 +64,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 parser.add_argument('-b', '--batch-size', metavar='N', type=int,
                     # default=4096,
                     default=128,
+                    # default=1,
                     help='mini-batch size (default: 4096), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
@@ -124,7 +123,6 @@ parser.add_argument('--temperature', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
 parser.add_argument('--temperaturesn', default=1000, type=float,
                     help='temperature for soft nearest neighbors loss')
-
 
 best_acc1 = 0
 
@@ -260,7 +258,6 @@ def main_worker(gpu, ngpus_per_node, args):
     model = ResNetSimCLRV2(base_model=args.arch, out_dim=512,
                            loss=args.losstype, include_mlp=False)
 
-
     # if args.modeltype == "stolen":
     #     checkpoint = torch.load(
     #         f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
@@ -374,7 +371,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if prefix == "/ssd003":
             train_dataset = datasets.ImageNet(
                 root="/scratch/ssd002/datasets/imagenet256/",
-                split = "train",
+                split="train",
                 transform=transforms.Compose([
                     transforms.RandomResizedCrop(224),
                     transforms.RandomHorizontalFlip(),
@@ -383,13 +380,13 @@ def main_worker(gpu, ngpus_per_node, args):
                 ]))
 
             val_dataset = datasets.ImageNet(
-                root = "/scratch/ssd002/datasets/imagenet256/",
-                split = "val",
+                root="/scratch/ssd002/datasets/imagenet256/",
+                split="val",
                 transform=transforms.Compose([transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,
-            ]))
+                                              transforms.CenterCrop(224),
+                                              transforms.ToTensor(),
+                                              normalize,
+                                              ]))
         else:
             train_dataset = datasets.ImageFolder(
                 traindir,
@@ -401,11 +398,11 @@ def main_worker(gpu, ngpus_per_node, args):
                 ]))
 
             val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
-                    transforms.Resize(256),
-                    transforms.CenterCrop(224),
-                    transforms.ToTensor(),
-                    normalize,
-                ]))
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ]))
 
         # val_loader = torch.utils.data.DataLoader(
         #     datasets.ImageFolder(valdir, transforms.Compose([
@@ -514,13 +511,15 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.useval == "True" and args.dataset == "imagenet":
         query_loader = torch.utils.data.DataLoader(
             val_dataset, batch_size=args.batch_size,
-            shuffle=False, #(train_sampler is None),
-            num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+            shuffle=False,  # (train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler,
+            drop_last=True)
     else:
         query_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size,
-            shuffle=False, #(train_sampler is None),
-            num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+            shuffle=False,  # (train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler,
+            drop_last=True)
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
@@ -565,6 +564,19 @@ def main_worker(gpu, ngpus_per_node, args):
         #             sanity_check(model.state_dict(), args.pretrained)
 
 
+def data_augment_steal(size=224, s=1):
+    color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+    data_transforms = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(size=size),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([color_jitter], p=0.8),  # p = 0.6
+            transforms.RandomGrayscale(p=0.2),  # increase p=0.4
+            GaussianBlur(kernel_size=int(0.1 * size)),  # 0.2 * size
+        ])
+    return data_transforms
+
+
 def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
@@ -575,6 +587,9 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         len(train_loader),
         [batch_time, data_time, losses],  # , top1, top5],
         prefix="Epoch: [{}]".format(epoch))
+
+    pil_to_tensor = transforms.ToTensor()
+    tensor_to_pil = transforms.ToPILImage()
 
     end = time.time()
     num = 0
@@ -588,7 +603,18 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         # compute output
         victim_features = victim_model(images)
-        stolen_features = model(images)
+
+        # augment images for stealing
+        new_images = []
+        data_augments = data_augment_steal()
+        for image in images:
+            image = tensor_to_pil(image)
+            new_image = data_augments(image)
+            new_image = pil_to_tensor(new_image)
+            new_images.append(new_image)
+        new_images = torch.stack(new_images)
+
+        stolen_features = model(new_images)
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
         elif args.losstype == "infonce":
@@ -601,7 +627,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         elif args.losstype == "softnn":
             all_features = torch.cat([stolen_features, victim_features], dim=0)
             loss = criterion(args, all_features,
-                                  pairwise_euclid_distance, args.temperaturesn)
+                             pairwise_euclid_distance, args.temperaturesn)
 
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
