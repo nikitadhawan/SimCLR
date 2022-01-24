@@ -100,7 +100,7 @@ def main():
     tval, pval = ttest(b, a, alternative="greater")
     print('tval 0 hypothesis b <= a: ', tval, ' pval: ', pval)
 
-    # Case 3.
+    print("Case 3.")
     a = [1.0, 1, 1.1]
     b = [1.0, 2, 2.0]
     print('a: ', a)
