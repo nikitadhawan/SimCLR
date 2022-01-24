@@ -111,7 +111,7 @@ train_loader = torch.utils.data.DataLoader(
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 dataset2 = RegularDataset(args.data)
-val_dataset = dataset2.get_dataset(args.dataset, 1)
+val_dataset = dataset.get_dataset(args.dataset, 2)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
@@ -129,8 +129,7 @@ test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=1, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_svhn = dataset2.get_test_dataset("svhn",
-                                                 1)
+test_svhn = dataset2.get_test_dataset("svhn",1)
 test_loader_svhn = torch.utils.data.DataLoader(
         test_svhn, batch_size=1, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -227,16 +226,16 @@ random_model2.eval()
 
 randomvictrain = []
 stolenvictrain = []
-vdist = []
-sdist = []
-rdist = []
 vstds = []
 sstds = []
 rstds = []
-for counter, (images, truelabels) in enumerate(tqdm(train_loader)):  # train_loader test_loader_svhn
+for counter, (images, truelabels) in enumerate(tqdm(val_loader)):  # train_loader test_loader_svhn
     images = torch.cat(images, dim=0)
     x = images[0]
     x = x.to(device)
+    vdist = []
+    sdist = []
+    rdist = []
     for i in range(10): # 10 points in a ball around the train_loader
         xprime = images[0] + torch.rand(x.size()) * 0.005  # x' is slightly away from the training point x
         xprime = xprime.to(device)
@@ -262,8 +261,21 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):  # train_loa
     vstds.append(np.std(vdist))
     sstds.append(np.std(sdist))
     rstds.append(np.std(rdist))
-    if counter >= 1:
+    if counter >= 200:
         break
+
+# choose points where v has the 100 greatest stds. then use those to query the stolen model (also with the same points)
+
+vstds = np.array(vstds)
+sstds = np.array(sstds)
+rstds = np.array(rstds)
+
+ind = np.argpartition(vstds, -50)[-50:]
+ind = np.random.choice(200, 50)
+vstds = vstds[ind]
+sstds = sstds[ind]
+rstds = rstds[ind]
+
 
 print("mean of std_v", np.mean(vstds))
 print("mean of std_r", np.mean(rstds))
