@@ -382,6 +382,9 @@ def main_worker(gpu, ngpus_per_node, args):
                     normalize,
                 ]))
 
+            indxs = random.sample(range(len(train_dataset)), args.num_queries)
+            train_dataset = torch.utils.data.Subset(train_dataset,indxs)
+
             val_dataset = datasets.ImageNet(
                 root = "/scratch/ssd002/datasets/imagenet256/",
                 split = "val",
@@ -579,6 +582,22 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
     end = time.time()
     num = 0
     model.train()
+
+    size = 224
+    s = 1
+    color_jitter = transforms.ColorJitter(
+        0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+    to_tensor = transforms.ToTensor()
+    to_pil = transforms.ToPILImage()
+    data_transforms = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(size=size),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([color_jitter], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            GaussianBlur(kernel_size=int(0.1 * size)),
+        ])
+
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -588,9 +607,17 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         # compute output
         victim_features = victim_model(images)
-        stolen_features = model(images)
-        # print("vic1", victim_features[0])
-        # print("stl1", stolen_features[0])
+        for image in images:
+            aug_image = to_pil(image)
+            aug_image = data_transforms(aug_image)
+            aug_image = to_tensor(aug_image)
+            augment_images.append(aug_image)
+
+        augment_images = torch.stack(augment_images)
+        augment_images = augment_images.to(device)
+        stolen_features = model(augment_images)
+        #stolen_features = model(images)
+
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
         elif args.losstype == "infonce":
