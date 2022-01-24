@@ -551,7 +551,7 @@ def main_worker(gpu, ngpus_per_node, args):
             test_dataset, batch_size=args.batch_size, shuffle=False,
             num_workers=args.workers)
 
-    elif args.dataset_name == 'stl10':
+    elif args.dataset == 'stl10':
 
         transform_stl10 = transforms.Compose([
             transforms.ToTensor(),
@@ -574,7 +574,7 @@ def main_worker(gpu, ngpus_per_node, args):
             test_dataset, batch_size=2 * args.batch_size,
             num_workers=args.workers, drop_last=False, shuffle=False)
 
-    elif args.dataset_name == 'caltech101':
+    elif args.dataset == 'caltech101':
         # https://colab.research.google.com/github/ashishpatel26/Awesome-Pytorch-Tutorials/blob/main/17.Pytorch%20Transfer%20learning%20with%20Caltech101.ipynb#scrollTo=8be0ysxctuEw
         train_transforms = transforms.Compose([
             transforms.ToPILImage(),
