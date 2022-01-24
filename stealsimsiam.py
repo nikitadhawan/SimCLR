@@ -589,6 +589,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         # compute output
         victim_features = victim_model(images)
         stolen_features = model(images)
+        # print("vic1", victim_features[0])
+        # print("stl1", stolen_features[0])
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
         elif args.losstype == "infonce":
