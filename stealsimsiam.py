@@ -37,7 +37,7 @@ from utils import print_args
 
 user = getpass.getuser()
 
-if user == 'akaleem':
+if user in ['akaleem', 'ady']:
     prefix = '/ssd003'
 else:
     prefix = ''
@@ -199,7 +199,7 @@ def main():
 def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
-    if user == "akaleem":
+    if user in ["akaleem", "ady"]:
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/"
     else:
         log_dir = "logs/"
@@ -235,7 +235,7 @@ def main_worker(gpu, ngpus_per_node, args):
     print("=> loading model '{}'".format(args.arch))
 
     victim_model = models.__dict__[args.arch]()
-    if user == "akaleem":
+    if user in  ["akaleem", "ady"]:
         checkpoint = torch.load(
             "models/checkpoint_0099-batch256.pth.tar",
             map_location="cpu")
@@ -704,9 +704,9 @@ def validate(val_loader, model, criterion, args):
 def save_checkpoint(state, is_best, args):
     if is_best:
         uname = getpass.getuser()
-        if uname == "akaleem":
+        if uname in ["akaleem", "ady"]:
             torch.save(state,
-                       f"/checkpoint/akaleem/SimCLR/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
+                       f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
         else:
             torch.save(state,
                        f"logs/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar")
