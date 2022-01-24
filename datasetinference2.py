@@ -10,7 +10,7 @@ from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset
 from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
-from utils import load_victim, load_watermark, accuracy
+from utils import load_victim, load_watermark, accuracy, print_args
 import os
 from torchvision import models
 from tqdm import tqdm
@@ -100,6 +100,7 @@ parser.add_argument('--entropy', default='False', type=str,
 
 
 args = parser.parse_args()
+print_args(args)
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
@@ -264,13 +265,13 @@ for counter, (images, truelabels) in enumerate(tqdm(val_loader)):  # train_loade
     if counter >= 200:
         break
 
-# choose points where v has the 100 greatest stds. then use those to query the stolen model (also with the same points)
+# choose 50 random points out of queried points to evaluate on
 
 vstds = np.array(vstds)
 sstds = np.array(sstds)
 rstds = np.array(rstds)
 
-ind = np.argpartition(vstds, -50)[-50:]
+#ind = np.argpartition(vstds, -50)[-50:]
 ind = np.random.choice(200, 50)
 vstds = vstds[ind]
 sstds = sstds[ind]
