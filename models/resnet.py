@@ -156,8 +156,10 @@ class ResNetSimCLR(nn.Module):
                             "resnet34": ResNet34( num_classes=out_dim),
                             "resnet50": ResNet50(num_classes=out_dim)} # Dont use ResNet50
         self.backbone = self._get_basemodel(base_model)
+        print("b", self.backbone)
         self.loss = loss
         self.entropy = entropy
+        print("dir", dir(self.backbone))
         dim_mlp = self.backbone.fc.in_features # 512
         print("dim", dim_mlp)
         if include_mlp:
