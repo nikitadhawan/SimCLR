@@ -3,7 +3,8 @@ import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, WatermarkDataset
-from models.resnet_simclr import ResNetSimCLR, WatermarkMLP
+from models.resnet_simclr import WatermarkMLP
+from models.resnet import ResNetSimCLR
 from models.resnet_big import SupConResNet
 from simclr import SimCLR
 
