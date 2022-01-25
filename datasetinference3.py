@@ -98,6 +98,17 @@ parser.add_argument('--watermark', default='False', type=str,
                     help='Evaluate with watermark model from victim', choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Use entropy victim model', choices=['True', 'False'])
+parser.add_argument('--victim_model_type', type=str,
+                    # default='supervised',
+                    # default='encoder',
+                    default='simclr',
+                    help='The type of the model from supervised or '
+                         'self-supervised learning.')
+parser.add_argument('--dist_type', type=str,
+                    # default='L2',
+                    default='InfoNCE',
+                    help='The distance type (metric) use to compare the '
+                         'difference between the representations.')
 
 
 args = parser.parse_args()
@@ -111,7 +122,7 @@ dataset2 = RegularDataset(args.data)
 assert args.n_views == 1
 train_dataset = dataset2.get_dataset(args.dataset,  args.n_views)  # unaugmented training set
 train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, shuffle=False,
+        train_dataset, batch_size=1, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 
@@ -126,11 +137,11 @@ val_loader = torch.utils.data.DataLoader(
 test_dataset = dataset2.get_test_dataset(args.dataset,
                                                  1)
 #
-indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-test_dataset = torch.utils.data.Subset(test_dataset,
-                                           indxs) # prevent overlap with queries
+# indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+# test_dataset = torch.utils.data.Subset(test_dataset,
+#                                            indxs) # prevent overlap with queries
 test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=1, shuffle=False,
+        test_dataset, batch_size=1, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 test_svhn = dataset2.get_test_dataset("svhn",1)
@@ -142,7 +153,6 @@ test_loader_svhn = torch.utils.data.DataLoader(
 color_jitter = transforms.ColorJitter(0.8, 0.8 , 0.8, 0.2)
 data_transforms = transforms.Compose(
     [transforms.ToPILImage(),
-     transforms.RandomResizedCrop(size=32),
      transforms.RandomHorizontalFlip(),
      transforms.RandomApply([color_jitter], p=0.8),
      transforms.RandomGrayscale(p=0.2),
@@ -151,11 +161,37 @@ data_transforms = transforms.Compose(
 
 
 
-criterion2 = nn.CosineSimilarity(dim=1)
+criterion = nn.CosineSimilarity(dim=1)
 
 if args.dataset == "imagenet":
-    victim_model = models.resnet50(pretrained=True).to(device)
-    victim_model.fc = torch.nn.Identity().to(device)
+    args.arch = "resnet50"
+    if args.victim_model_type == 'supervised':
+        print("Using imagenet supervised model")
+        victim_model = models.resnet50(pretrained=True).to(device)
+        victim_model.fc = torch.nn.Identity().to(device)
+    else:
+        class ResNet50v2(nn.Module):
+            def __init__(self, pretrained, num_classes=10):
+                super(ResNet50v2, self).__init__()
+                self.pretrained = pretrained
+
+            def forward(self, x):
+                x = self.pretrained(x)
+                return x
+
+
+        victim_model= resnet50rep().to(device)
+        checkpoint = torch.load(
+                f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location="cpu")
+        state_dict = checkpoint['state_dict']
+        new_state_dict = state_dict.copy()
+        # for k in state_dict.keys():
+        #     if k.startswith('fc.'):
+        #         del new_state_dict[k]
+
+        victim_model.load_state_dict(new_state_dict, strict=False)
+        del state_dict
+
 
     # 2048 dimensional output
 elif args.victimhead == "False":
@@ -179,7 +215,20 @@ else:
 # Load stolen copy
 if args.dataset == "imagenet":
     stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=512, loss=None,
-                                  include_mlp=False).to(device)
+                   include_mlp=False).to(device)
+    checkpoint = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar",
+        map_location="cpu")
+    state_dict = checkpoint['state_dict']
+    new_state_dict = {}
+    for k in list(state_dict.keys()):
+        if k.startswith('module.backbone'):
+            # remove prefix
+            new_state_dict[k[len("module."):]] = state_dict[k]
+        else:
+            new_state_dict[k] = state_dict[k]
+    stolen_model.load_state_dict(new_state_dict)
+    del state_dict
 else:
     stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=128, loss=None,
                                   include_mlp=False).to(device)
@@ -195,47 +244,47 @@ stolen_model.load_state_dict(state_dict)
 #             f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18infonceTRAIN/cifar10_checkpoint_100_infonceWATERMARK.pth.tar",
 #             map_location=device)
 # use out_dim=512 below for this
-if args.dataset == "imagenet":
-    # With SimCLR model below:
-    class ResNet50v2(nn.Module):
-        def __init__(self, pretrained, num_classes=10):
-            super(ResNet50v2, self).__init__()
-            self.pretrained = pretrained
-
-        def forward(self, x):
-            x = self.pretrained(x)
-            return x
-
-
-    random_model= resnet50rep().to(device)
-    checkpoint = torch.load(
-            f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
-    state_dict = checkpoint['state_dict']
-    new_state_dict = state_dict.copy()
-    # for k in state_dict.keys():
-    #     if k.startswith('fc.'):
-    #         del new_state_dict[k]
-
-    random_model.load_state_dict(new_state_dict, strict=False)
-else:
+# if args.dataset == "imagenet":
+#     # With SimCLR model below:
+#     class ResNet50v2(nn.Module):
+#         def __init__(self, pretrained, num_classes=10):
+#             super(ResNet50v2, self).__init__()
+#             self.pretrained = pretrained
+#
+#         def forward(self, x):
+#             x = self.pretrained(x)
+#             return x
+#
+#
+#     random_model= resnet50rep().to(device)
+#     checkpoint = torch.load(
+#             f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+#     state_dict = checkpoint['state_dict']
+#     new_state_dict = state_dict.copy()
+#     # for k in state_dict.keys():
+#     #     if k.startswith('fc.'):
+#     #         del new_state_dict[k]
+#
+#     random_model.load_state_dict(new_state_dict, strict=False)
+# else:
     # loss = "infonce"
     # checkpoint2 = torch.load(
     #             f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18{loss}TRAIN/cifar10_checkpoint_9000_{loss}_cifar10.pth.tar",
     #             map_location=device)
     #
     # random_dict = checkpoint2['state_dict']
-    random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
-    #random_model.load_state_dict(random_dict)
-    random_model = load_victim(50, "cifar10", random_model,
-                                   "resnet18", "infonce",
-                                   device=device, discard_mlp=True)
+random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
+#random_model.load_state_dict(random_dict)
+random_model = load_victim(50, "cifar10", random_model,
+                               "resnet18", "infonce",
+                               device=device, discard_mlp=True)
 
-    random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
-                                  include_mlp=False).to(
-        device)
-    random_model2 = load_victim(100, "cifar10", random_model2,
-                               "resnet34", "infonce2",
-                               device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
+                              include_mlp=False).to(
+    device)
+random_model2 = load_victim(100, "cifar10", random_model2,
+                           "resnet34", "infonce2",
+                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
 victim_model.eval()
 stolen_model.eval()
 random_model.eval()
@@ -255,15 +304,34 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)):  # train_loa
     sdist = []
     rdist = []
     for i in range(10): # 10 points with augmentations applied on the initial point.
+        # xprime = images[0] + torch.rand(
+        #     x.size()) * 0.005  # x' is slightly away from the training point x
+        # xprime = xprime.to(device)  # adding noise
         xprime = data_transforms(x).to(device)
-        dist_v = (victim_model(torch.unsqueeze(x, dim=0)) - victim_model(torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        dist_s = (stolen_model(torch.unsqueeze(x, dim=0)) - stolen_model(
-            torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        dist_r = (random_model2(torch.unsqueeze(x, dim=0)) - random_model2(
-            torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        # print("dist_v", dist_v)
-        # print("dist_s", dist_s)
-        # print("dist_r", dist_r)
+        # print("X", x.shape)
+        # print("X'", xprime.shape)
+        with torch.no_grad():
+            vx = victim_model(torch.unsqueeze(x, dim=0))
+            vxprime = victim_model(torch.unsqueeze(xprime, dim=0))
+            rx = random_model2(torch.unsqueeze(x, dim=0))
+            rxprime = random_model2(torch.unsqueeze(xprime, dim=0))
+            sx = stolen_model(torch.unsqueeze(x, dim=0))
+            sxprime = stolen_model(torch.unsqueeze(xprime, dim=0))
+
+        if args.dist_type == "L2":
+            dist_v = (victim_model(torch.unsqueeze(x, dim=0)) - victim_model(torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+            dist_s = (stolen_model(torch.unsqueeze(x, dim=0)) - stolen_model(
+                torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+            dist_r = (random_model2(torch.unsqueeze(x, dim=0)) - random_model2(
+                torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+        elif args.dist_type == "cosine":
+            #print("vx shape", vx.shape)
+            dist_v = criterion(vx, vxprime)
+            dist_r = criterion(rx, rxprime)
+            dist_s = criterion(sx, sxprime)
+            # print("dist_v", dist_v)
+            # print("dist_s", dist_s)
+            # print("dist_r", dist_r)
         vdist.append(dist_v.item())
         sdist.append(dist_s.item())
         rdist.append(dist_r.item())
@@ -296,42 +364,43 @@ for counter, (images, truelabels) in enumerate(tqdm(test_loader)):  # train_load
     vdist = []
     sdist = []
     rdist = []
-    for i in range(10): # 10 points with augmentations applied on the initial point
+    for i in range(
+            10):  # 10 points with augmentations applied on the initial point.
+        # xprime = images[0] + torch.rand(
+        #     x.size()) * 0.005  # x' is slightly away from the training point x
+        # xprime = xprime.to(device)  # adding noise
         xprime = data_transforms(x).to(device)
-        dist_v = (victim_model(torch.unsqueeze(x, dim=0)) - victim_model(torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        dist_s = (stolen_model(torch.unsqueeze(x, dim=0)) - stolen_model(
-            torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        dist_r = (random_model2(torch.unsqueeze(x, dim=0)) - random_model2(
-            torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
-        # print("dist_v", dist_v)
-        # print("dist_s", dist_s)
-        # print("dist_r", dist_r)
+        with torch.no_grad():
+            vx = victim_model(torch.unsqueeze(x, dim=0))
+            vxprime = victim_model(torch.unsqueeze(xprime, dim=0))
+            rx = random_model(torch.unsqueeze(x, dim=0))
+            rxprime = random_model(torch.unsqueeze(xprime, dim=0))
+            sx = stolen_model(torch.unsqueeze(x, dim=0))
+            sxprime = stolen_model(torch.unsqueeze(xprime, dim=0))
+
+        if args.dist_type == "L2":
+            dist_v = (victim_model(torch.unsqueeze(x, dim=0)) - victim_model(
+                torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+            dist_s = (stolen_model(torch.unsqueeze(x, dim=0)) - stolen_model(
+                torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+            dist_r = (random_model2(torch.unsqueeze(x, dim=0)) - random_model2(
+                torch.unsqueeze(xprime, dim=0))).pow(2).sum(1).sqrt()
+        elif args.dist_type == "cosine":
+            #print("vx shape", vx.shape)
+            dist_v = criterion(vx, vxprime)
+            dist_r = criterion(rx, rxprime)
+            dist_s = criterion(sx, sxprime)
+            # print("dist_v", dist_v)
+            # print("dist_s", dist_s)
+            # print("dist_r", dist_r)
         vdist.append(dist_v.item())
         sdist.append(dist_s.item())
         rdist.append(dist_r.item())
-    # images = images.to(device)
-    # victim_features = victim_model(images)
-    # stolen_features = stolen_model(images)
-    # random_features2 = random_model2(images)
-    # dist = (victim_features - stolen_features).pow(2).sum(1).sqrt()
-    # dist3 = (victim_features - random_features2).pow(2).sum(1).sqrt()
-    # randomvictrain.extend(dist3.tolist())
-    # stolenvictrain.extend(dist.tolist())
     randomtest.extend(rdist)
     victimtest.extend(vdist)
     stolentest.extend(sdist)
     if counter >= 200:
         break
-
-
-# choose 50 random points out of queried points to evaluate on
-
-# vstds = np.array(vstds)
-# sstds = np.array(sstds)
-# rstds = np.array(rstds)
-
-
-
 
 
 tval, pval = ttest(randomtrain, randomtest, alternative="greater")
@@ -342,11 +411,6 @@ print('Null hypothesis for victim: training distances <= testing points', ' pval
 
 tval, pval = ttest(stolentrain, stolentest, alternative="greater")
 print('Null hypothesis for stolen: training distances <= testing points', ' pval: ', pval)
-
-# tval, pval = ttest(rstds, vstds, alternative="greater")
-# print('Null hypothesis sigma_r <= sigma_v', ' pval: ', pval)
-
-
 
 
 print(f"r_train: {np.mean(randomtrain)} +- {np.std(randomtrain)}")
