@@ -4,7 +4,8 @@ import torch.backends.cudnn as cudnn
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset, ImageNetDataset
-from models.resnet_simclr import ResNetSimCLR, ResNetSimCLRV2, SimSiam, WatermarkMLP
+from models.resnet_simclr import SimSiam, WatermarkMLP
+from models.resnet import ResNetSimCLR, ResNetSimCLRV2,
 from models.resnet_wider import resnet50rep
 from simclr import SimCLR
 from utils import load_victim, load_watermark

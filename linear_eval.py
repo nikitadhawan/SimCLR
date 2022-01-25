@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import torchvision
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLR
+#from models.resnet_simclr import ResNetSimCLR
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
+from models.resnet import ResNetSimCLR, ResNet18, ResNet34 , ResNet50
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
@@ -187,16 +188,16 @@ def get_cifar10_data_loaders(download, dataset = None, shuffle=False, batch_size
         transforms.Resize(224),
     ])
     if dataset == "imagenet":
-        train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+        train_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/",
                                          train=True, download=download,
                                          transform=transform_train)
-        test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+        test_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/",
                                         train=False, download=download,
                                         transform=transform_test)
     else:
-        train_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/', train=True, download=download,
+        train_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=True, download=download,
                                       transform=transforms.ToTensor())
-        test_dataset = datasets.CIFAR10('/ssd003/home/akaleem/data/',
+        test_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/",
                                         train=False, download=download,
                                         transform=transforms.ToTensor())
 
@@ -223,20 +224,20 @@ def get_svhn_data_loaders(download, dataset = None, shuffle=False, batch_size=ar
         transforms.Resize(224),
     ])
     if dataset == "imagenet":
-        train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='train', download=download,
+        train_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='train', download=download,
                                       transform=transform_train)
     else:
-        train_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
+        train_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN",
                                       split='train', download=download,
                                       transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
 
     if dataset == "imagenet":
-        test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN', split='test', download=download,
+        test_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='test', download=download,
                                   transform=transform_test)
     else:
-        test_dataset = datasets.SVHN('/ssd003/home/akaleem/data/SVHN',
+        test_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN",
                                      split='test', download=download,
                                      transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
@@ -295,12 +296,11 @@ logging.basicConfig(
 print(f"logging to {os.path.join(log_dir, logname)}")
 
 if args.arch == 'resnet18':
-    model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
+    model = ResNet18(num_classes=10).to(device)
 elif args.arch == 'resnet34':
-    model = torchvision.models.resnet34(pretrained=False,
-                                        num_classes=10).to(device)
+    model = ResNet34( num_classes=10).to(device)
 elif args.arch == 'resnet50':
-    model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
+    model = ResNet50(num_classes=10).to(device)
 
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
@@ -312,11 +312,11 @@ else:
     print("Evaluating stolen model")
 
 if args.dataset_test == 'cifar10':
-    train_loader, test_loader = get_cifar10_data_loaders(download=False, dataset=args.dataset)
+    train_loader, test_loader = get_cifar10_data_loaders(download=True, dataset=args.dataset)
 elif args.dataset_test == 'stl10':
     train_loader, test_loader = get_stl10_data_loaders(download=False, dataset = args.dataset)
 elif args.dataset_test == "svhn":
-    train_loader, test_loader = get_svhn_data_loaders(download=False, dataset = args.dataset)
+    train_loader, test_loader = get_svhn_data_loaders(download=True, dataset = args.dataset)
 
 # freeze all layers but the last fc (can try by training all layers)
 
