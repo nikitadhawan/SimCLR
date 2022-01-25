@@ -1,0 +1,19 @@
+ssh://nicolas@localhost:3310/home/nicolas/anaconda3/envs/nomkl_env/bin/python -u /home/nicolas/code/SimCLR/reactive_defenses/dataset_inference_diffs.py
+cwd:  /home/nicolas/code/SimCLR/reactive_defenses
+model_path: ../../SimCLRmodels/200resnet34infonceTRAIN/svhn_checkpoint_200_infonce.pth.tar
+Using downloaded and verified file: /home/nicolas/data/SVHN/train_32x32.mat
+Using downloaded and verified file: /home/nicolas/data/SVHN/test_32x32.mat
+ 14%|█████▍                                  | 99/732 [26:45<2:51:06, 16.22s/it]
+ 38%|███████████████▉                          | 99/260 [26:46<43:31, 16.22s/it]
+length train_diffs:  1000000
+length test_diffs:  1000000
+mean_train svhn distances:  10.246018
+median_train:  9.522842
+mean_test svhn distances:  10.241261
+median_test:  9.600426
+Null hypothesis: distances test <= distances train
+tval:  -0.8206597829302809  pval:  0.794079908754938  delta u:  -0.004757881
+
+Process finished with exit code 0
+
+
