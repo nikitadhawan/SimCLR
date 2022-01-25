@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 
-import sklearn.metrics
+#import sklearn.metrics
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,7 +11,7 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
 from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_euclid_distance, SupConLoss, neg_cosine, regression_loss, barlow_loss, entropy_rep
-import scipy.stats
+#import scipy.stats
 
 torch.manual_seed(0)
 
