@@ -615,7 +615,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         with torch.no_grad():
             victim_features = victim_model(images)
 
-        if args.use_aug == "True":
+        if args.useaug == "True":
             augment_images = []
             for image in images:
                 aug_image = to_pil(image)
