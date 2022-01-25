@@ -10,29 +10,22 @@ for a point in the (public) training set of the respective model,
 and −1 if it came from victim’s private set.
 
 """
-
 import argparse
 import os
+import time
 from getpass import getuser
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 from torchvision import models
+from torchvision.transforms import transforms
 from tqdm import tqdm
 
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
-    RegularDataset
-from models.resnet_simclr import ResNetSimCLRV2
-from reactive_defenses.custom_dataset import CustomDataset
-from reactive_defenses.net_regressor import NetRegressor
-from utils import load_victim
-
-from torchvision.transforms import transforms
+from data_aug.contrastive_learning_dataset import RegularDataset
 from data_aug.gaussian_blur import GaussianBlur
+from models.resnet_simclr import ResNetSimCLRV2
 from statistical_tests.t_test import ttest
+from utils import load_victim
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -51,8 +44,8 @@ parser.add_argument('-data', metavar='DIR',
                     default=r"C:\Users\adzie\code\data",
                     help='path to dataset')
 parser.add_argument('--dataset_train',
-                    default='cifar10',
-                    # default='svhn',
+                    # default='cifar10',
+                    default='svhn',
                     help='dataset name train',
                     choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--dataset_test',
@@ -220,7 +213,7 @@ def get_data_loaders(args):
 
     # train
     dataset_train = RegularDataset(args.data)
-    train_dataset = dataset_train.get_dataset(args.dataset_train, n_views=1)
+    train_dataset = dataset_train.get_train_dataset(args.dataset_train, n_views=1)
     # train_dataset = dataset_train.get_dataset(name='cifar10', n_views=1)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False,
@@ -238,11 +231,14 @@ def get_data_loaders(args):
     return train_loader, test_loader
 
 
-def get_diffs(data_loader, model, limit=10):
+def get_diffs(data_loader, model, dataset_name, limit=100):
     num_train = 0
     all_diffs = []
 
-    size = 32
+    if dataset_name == 'imagenet':
+        size = 224
+    else:
+        size = 32
     s = 1
     color_jitter = transforms.ColorJitter(
         0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
@@ -296,8 +292,10 @@ def store_diffs(args):
 
     train_loader, test_loader = get_data_loaders(args=args)
 
-    train_diffs = get_diffs(data_loader=train_loader, model=victim_model)
-    test_diffs = get_diffs(data_loader=test_loader, model=victim_model)
+    train_diffs = get_diffs(data_loader=train_loader, model=victim_model,
+                            dataset_name=args.dataset_train)
+    test_diffs = get_diffs(data_loader=test_loader, model=victim_model,
+                           dataset_name=args.dataset_test)
 
     np.save(f'train_diffs_{args.model_type}.npy', train_diffs)
     np.save(f'test_diffs_{args.model_type}.npy', test_diffs)
@@ -322,13 +320,16 @@ def run_ttest(train_diffs, test_diffs, args):
     print('median_test: ', np.median(test_diffs))
     tval, pval = ttest(test_diffs, train_diffs, alternative="greater")
     print('Null hypothesis: distances test <= distances train')
-    print('tval: ', tval, ' pval: ', pval)
+    print('tval: ', tval, ' pval: ', pval, ' delta u: ', mean_test - mean_train)
 
 
 def main(args):
+    start = time.time()
     store_diffs(args=args)
     train_diffs, test_diffs = load_diffs(args=args)
     run_ttest(train_diffs=train_diffs, test_diffs=test_diffs, args=args)
+    stop = time.time()
+    print('elapsed time: ', stop - start)
 
 
 if __name__ == "__main__":

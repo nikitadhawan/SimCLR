@@ -32,35 +32,35 @@ class ContrastiveLearningDataset:
             transforms.ToTensor()])
         return data_transforms
 
-    def get_dataset(self, name, n_views):
+    def get_dataset(self, name, n_views, size=224):
         valid_datasets = {
             'cifar10': lambda: datasets.CIFAR10(
                 self.root_folder, train=True,
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(32), n_views),
+                    self.get_simclr_pipeline_transform(size), n_views),
                 download=True),
 
             'stl10': lambda: datasets.STL10(
                 f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10",
                 split='unlabeled',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(96),
+                    self.get_simclr_pipeline_transform(size),
                     n_views),
                 download=True),
 
-            'svhn': lambda: datasets.SVHN(self.root_folder + "/SVHN",
-                                          split='train',
-                                          transform=ContrastiveLearningViewGenerator(
-                                              self.get_simclr_pipeline_transform(
-                                                  32),
-                                              n_views),
-                                          download=True),
+            'svhn': lambda: datasets.SVHN(
+                self.root_folder + "/SVHN",
+                split='train',
+                transform=ContrastiveLearningViewGenerator(
+                    self.get_simclr_pipeline_transform(
+                        size),
+                    n_views),
+                download=True),
             'imagenet': lambda: datasets.ImageNet(
                 root="/scratch/ssd002/datasets/imagenet256/",
                 split='train',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(
-                        32),
+                    self.get_simclr_pipeline_transform(size),
                     n_views))
         }
 
@@ -101,7 +101,7 @@ class ContrastiveLearningDataset:
                 split='val',
                 transform=ContrastiveLearningViewGenerator(
                     self.get_simclr_pipeline_transform(
-                        32),
+                        224),
                     n_views))
         }
 
@@ -129,36 +129,55 @@ class RegularDataset:
             transforms.ToTensor()])
         return data_transforms
 
-    def get_dataset(self, name, n_views):
+    def get_train_dataset(self, name, n_views, size=224):
         valid_datasets = {
-            'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
-                                                transform=ContrastiveLearningViewGenerator(
-                                                    self.get_simclr_pipeline_transform(
-                                                        32), n_views),
-                                                download=True),
+            'cifar10': lambda: datasets.CIFAR10(
+                self.root_folder, train=True,
+                # transform=ContrastiveLearningViewGenerator(
+                #     self.get_simclr_pipeline_transform(
+                #         size), n_views),
+                transform=transforms.Compose(
+                    [
+                        transforms.Pad(4),
+                        transforms.RandomCrop(32),
+                        transforms.RandomHorizontalFlip(),
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            (0.49139969, 0.48215842, 0.44653093),
+                            (0.24703223, 0.24348513, 0.26158784),
+                        ),
+                    ]
+                ),
+                download=True),
 
             'stl10': lambda: datasets.STL10(
                 f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10",
                 split='unlabeled',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(96),
+                    self.get_simclr_pipeline_transform(size),
                     n_views),
                 download=True),
 
-            'svhn': lambda: datasets.SVHN(self.root_folder + "/SVHN",
-                                          split='train',
-                                          transform=ContrastiveLearningViewGenerator(
-                                              self.get_simclr_pipeline_transform(
-                                                  32),
-                                              n_views),
-                                          download=True),
+            'svhn': lambda: datasets.SVHN(
+                self.root_folder + "/SVHN",
+                split='train',
+                transform=transforms.Compose(
+                    [
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            (0.43768212, 0.44376972, 0.47280444),
+                            (0.19803013, 0.20101563, 0.19703615),
+                        ),
+                    ]
+                ),
+                download=True),
+
             'imagenet': lambda: datasets.ImageNet(
-                root="/scratch/ssd002/datasets/imagenet256/",
+                # root="/scratch/ssd002/datasets/imagenet256/",
+                root=os.path.join(self.root_folder, 'imagenet'),
                 split='train',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_imagenet_transform(
-                        32),
-                    n_views))
+                    self.get_imagenet_transform(size), n_views))
         }
 
         try:
@@ -168,36 +187,59 @@ class RegularDataset:
         else:
             return dataset_fn()
 
-    def get_test_dataset(self, name, n_views):
+    def get_test_dataset(self, name, n_views, size=224):
         valid_datasets = {
-            'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=False,
-                                                transform=ContrastiveLearningViewGenerator(
-                                                    self.get_simclr_pipeline_transform(
-                                                        32),
-                                                    n_views),
-                                                download=True),
+            'cifar10': lambda: datasets.CIFAR10(
+                self.root_folder, train=False,
+                # transform=ContrastiveLearningViewGenerator(
+                #     self.get_simclr_pipeline_transform(
+                #         size),
+                #     n_views),
+                transform=transforms.Compose(
+                    [
+                        transforms.Pad(4),
+                        transforms.RandomCrop(32),
+                        transforms.RandomHorizontalFlip(),
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            (0.49139969, 0.48215842, 0.44653093),
+                            (0.24703223, 0.24348513, 0.26158784),
+                        ),
+                    ]
+                ),
+                download=True),
 
             'stl10': lambda: datasets.STL10(
                 f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(96),
+                    self.get_simclr_pipeline_transform(size),
                     n_views),
                 download=True),
 
-            'svhn': lambda: datasets.SVHN(self.root_folder + "/SVHN",
-                                          split='test',
-                                          transform=ContrastiveLearningViewGenerator(
-                                              self.get_simclr_pipeline_transform(
-                                                  32),
-                                              n_views),
-                                          download=True),
+            'svhn': lambda: datasets.SVHN(
+                self.root_folder + "/SVHN",
+                split='test',
+                # transform=ContrastiveLearningViewGenerator(
+                #     self.get_simclr_pipeline_transform(
+                #         size),
+                #     n_views),
+                transform=transforms.Compose(
+                    [
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            (0.43768212, 0.44376972, 0.47280444),
+                            (0.19803013, 0.20101563, 0.19703615),
+                        ),
+                    ]
+                ),
+                download=True),
+
             'imagenet': lambda: datasets.ImageNet(
-                root="/scratch/ssd002/datasets/imagenet256/",
+                # root="/scratch/ssd002/datasets/imagenet256/",
+                root=os.path.join(self.root_folder, 'imagenet'),
                 split='val',
                 transform=ContrastiveLearningViewGenerator(
-                    self.get_imagenet_transform(
-                        32),
-                    n_views))
+                    self.get_imagenet_transform(size), n_views))
         }
 
         try:

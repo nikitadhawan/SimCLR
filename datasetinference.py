@@ -124,7 +124,7 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=args.workers, pin_memory=True, drop_last=True)
 
 dataset2 = RegularDataset(args.data)
-val_dataset = dataset2.get_dataset(args.dataset, 1)
+val_dataset = dataset2.get_train_dataset(args.dataset, 1)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                       indxs)

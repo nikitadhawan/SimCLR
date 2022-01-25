@@ -141,7 +141,7 @@ def main():
     if args.datasetsteal == "imagenet":
         query_dataset = dataset.get_test_dataset(args.datasetsteal, args.n_views) # can change to get_test_dataset
     elif args.datasetsteal != args.dataset or args.force == "True":
-        query_dataset = dataset.get_dataset(args.datasetsteal, args.n_views)
+        query_dataset = dataset.get_train_dataset(args.datasetsteal, args.n_views)
         indxs = list(range(0, len(query_dataset)))
         query_dataset = torch.utils.data.Subset(query_dataset,
                                                indxs)
