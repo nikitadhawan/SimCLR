@@ -600,6 +600,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
             GaussianBlur(kernel_size=int(0.1 * size)),
         ])
 
+    tloss = 0
+
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -608,7 +610,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
             images = images.cuda(args.gpu, non_blocking=True)
 
         # compute output
-        victim_features = victim_model(images)
+        with torch.no_grad():
+            victim_features = victim_model(images)
         augment_images = []
         for image in images:
             aug_image = to_pil(image)
@@ -639,6 +642,7 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
+        tloss += loss.item()
         # top1.update(acc1[0], images.size(0))
         # top5.update(acc5[0], images.size(0))
 
@@ -656,7 +660,8 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
 
         if i % args.print_freq == 0:
             progress.display(i)
-            logging.debug(f"Epoch: {epoch}. Loss: {loss.item()}")
+    logging.debug(f"Epoch: {epoch}. Loss: {tloss/i}")
+            # print average over batch
 
 
 def validate(val_loader, model, criterion, args):

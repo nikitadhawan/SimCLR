@@ -55,7 +55,7 @@ class ContrastiveLearningDataset:
                               split='train',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_simclr_pipeline_transform(
-                                      32),
+                                      224),
                                   n_views))
                           }
 
@@ -90,7 +90,7 @@ class ContrastiveLearningDataset:
                               split='val',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_simclr_pipeline_transform(
-                                      32),
+                                      224),
                                   n_views))
                           }
 
@@ -139,11 +139,11 @@ class RegularDataset:
                                                             n_views),
                                                         download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='train',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_imagenet_transform(
-                                      32),
+                                      224),
                                   n_views))
                           }
 
@@ -174,11 +174,11 @@ class RegularDataset:
                                                             n_views),
                                                         download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='val',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_imagenet_transform(
-                                      32),
+                                      224),
                                   n_views))
                           }
 
@@ -248,7 +248,7 @@ class WatermarkDataset:
                                   n_views),
                               download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='val',
                               transform=WatermarkViewGenerator(
                                   self.get_imagenet_transform(
@@ -311,7 +311,7 @@ class ImageNetDataset:
                                                             ]),
                                                         download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='train',
                               transform=self.get_imagenet_transform(224))
                           }
