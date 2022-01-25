@@ -237,9 +237,11 @@ class ResNetSimCLRV2(nn.Module):
 
 
 def trial():
+    device = 'cuda'
     model = ResNetSimCLR(base_model="resnet34", out_dim=128,
-                 entropy=False)
-    print("model", model)
+                 entropy=False, include_mlp=False).to(device)
+    from torchsummary import summary
+    summary(model, input_size = (3,32,32))
 
 
 
