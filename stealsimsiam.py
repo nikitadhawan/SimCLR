@@ -119,6 +119,8 @@ parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use.')
 parser.add_argument('--useval', default='False', type=str,
                     help='Use validation set for stealing (only with imagenet)')
+parser.add_argument('--useaug', default='True', type=str,
+                    help='Use augmentations with stealing')
 parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
 parser.add_argument('--temperature', default=0.07, type=float,
@@ -375,7 +377,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                          std=[0.229, 0.224, 0.225])
         if prefix == "/ssd003":
             train_dataset = datasets.ImageNet(
-                root="/scratch/ssd002/datasets/imagenet256/",
+                root="/scratch/ssd002/datasets/imagenet_pytorch/",
                 split = "train",
                 transform=transforms.Compose([
                     transforms.RandomResizedCrop(224),
@@ -388,7 +390,7 @@ def main_worker(gpu, ngpus_per_node, args):
             train_dataset = torch.utils.data.Subset(train_dataset,indxs)
 
             val_dataset = datasets.ImageNet(
-                root = "/scratch/ssd002/datasets/imagenet256/",
+                root = "/scratch/ssd002/datasets/imagenet_pytorch/",
                 split = "val",
                 transform=transforms.Compose([transforms.Resize(256),
                 transforms.CenterCrop(224),
@@ -612,18 +614,21 @@ def train(train_loader, model, victim_model, criterion, optimizer, epoch, args):
         # compute output
         with torch.no_grad():
             victim_features = victim_model(images)
-        augment_images = []
-        for image in images:
-            aug_image = to_pil(image)
-            aug_image = data_transforms(aug_image)
-            aug_image = to_tensor(aug_image)
-            augment_images.append(aug_image)
 
-        augment_images = torch.stack(augment_images)
-        if args.gpu is not None:
-            augment_images = augment_images.cuda(args.gpu, non_blocking=True)
-        stolen_features = model(augment_images)
-        #stolen_features = model(images)
+        if args.use_aug == "True":
+            augment_images = []
+            for image in images:
+                aug_image = to_pil(image)
+                aug_image = data_transforms(aug_image)
+                aug_image = to_tensor(aug_image)
+                augment_images.append(aug_image)
+
+            augment_images = torch.stack(augment_images)
+            if args.gpu is not None:
+                augment_images = augment_images.cuda(args.gpu, non_blocking=True)
+            stolen_features = model(augment_images)
+        else:
+            stolen_features = model(images)
 
         if args.losstype == "mse":
             loss = criterion(stolen_features, victim_features)
