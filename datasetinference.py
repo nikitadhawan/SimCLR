@@ -131,7 +131,7 @@ val_loader = torch.utils.data.DataLoader(
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 if args.watermark == "True":
-    test_dataset = watermark_dataset.get_test_dataset(args.dataset, args.n_views)
+    test_dataset = watermark_dataset.get_test_dataset("svhn", args.n_views)
 else:
     test_dataset = dataset.get_test_dataset(args.dataset, args.n_views)
 

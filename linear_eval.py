@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import torchvision
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLR
+#from models.resnet_simclr import ResNetSimCLR
+from models.resnet import ResNetSimCLR, ResNet18, ResNet34 , ResNet50 # from other file
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
@@ -249,12 +250,11 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 if args.arch == 'resnet18':
-    model = torchvision.models.resnet18(pretrained=False, num_classes=10).to(device)
+    model = ResNet18(num_classes=10).to(device)
 elif args.arch == 'resnet34':
-    model = torchvision.models.resnet34(pretrained=False,
-                                        num_classes=10).to(device)
+    model = ResNet34( num_classes=10).to(device)
 elif args.arch == 'resnet50':
-    model = torchvision.models.resnet50(pretrained=False, num_classes=10).to(device)
+    model = ResNet50(num_classes=10).to(device)
 
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
