@@ -85,7 +85,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -156,10 +156,8 @@ class ResNetSimCLR(nn.Module):
                             "resnet34": ResNet34( num_classes=out_dim),
                             "resnet50": ResNet50(num_classes=out_dim)} # Dont use ResNet50
         self.backbone = self._get_basemodel(base_model)
-        print("b", self.backbone)
         self.loss = loss
         self.entropy = entropy
-        print("dir", dir(self.backbone))
         dim_mlp = self.backbone.fc.in_features # 512
         print("dim", dim_mlp)
         if include_mlp:
