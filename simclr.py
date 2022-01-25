@@ -131,6 +131,11 @@ class SimCLR(object):
             start_epoch = checkpoint['epoch']
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer,
+                                                                   T_max=len(
+                                                                       train_loader),
+                                                                   eta_min=0,
+                                                                   last_epoch=99)
             logging.info(f"Restarting SimCLR training from {start_epoch} epochs.")
             self.args.epochs = self.args.epochs - start_epoch
 

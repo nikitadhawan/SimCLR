@@ -314,7 +314,7 @@ else:
 if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=True, dataset=args.dataset)
 elif args.dataset_test == 'stl10':
-    train_loader, test_loader = get_stl10_data_loaders(download=False, dataset = args.dataset)
+    train_loader, test_loader = get_stl10_data_loaders(download=True, dataset = args.dataset)
 elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=True, dataset = args.dataset)
 
