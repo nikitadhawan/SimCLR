@@ -62,6 +62,8 @@ parser.add_argument('--watermark', default='False', type=str,
                     help='Use watermarking when training the model', choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Additional softmax layer when training the model', choices=['True', 'False'])
+parser.add_argument('--resume', default='False', type=str,
+                    help='Additional softmax layer when training the model', choices=['True', 'False'])
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of samples to train the model (only works with losstype=infonce2)')
 

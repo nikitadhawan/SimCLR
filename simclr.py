@@ -125,6 +125,16 @@ class SimCLR(object):
         logging.info(f"Training with gpu: {torch.cuda.is_available()}.")
         logging.info(f"Args: {self.args}")
 
+        if self.args.resume == "True":
+            checkpoint_name = f'{self.args.dataset}_checkpoint_100_{self.args.losstype}.pth.tar'
+            checkpoint = torch.load(os.path.join(f"/checkpoint/{os.getenv('USER')}/SimCLR/100{self.args.arch}{self.args.losstype}TRAIN/", checkpoint_name), map_location=self.args.device) # assumes it was first trained with 100 epochs.
+            start_epoch = checkpoint['epoch']
+            self.model.load_state_dict(checkpoint['state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            logging.info(f"Restarting SimCLR training from {start_epoch} epochs.")
+            self.args.epochs = self.args.epochs - start_epoch
+
+
         for epoch_counter in range(self.args.epochs):
             total_queries = 0
             for images, truelabels in tqdm(train_loader):
