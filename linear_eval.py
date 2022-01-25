@@ -328,24 +328,24 @@ for name, param in model.named_parameters():
 # model.fc.bias.data.zero_()
 
 
-# params_to_update = []
-# #https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
-# for name, param in model.named_parameters():
-#     if param.requires_grad == True:
-#         params_to_update.append(param)
+params_to_update = []
+#https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
+for name, param in model.named_parameters():
+    if param.requires_grad == True:
+        params_to_update.append(param)
 
 
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
 if args.modeltype == "victim":
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                                 momentum=0.9, weight_decay=0.0008)
-    #optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008) # params_to_update
+    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+    #                              momentum=0.9, weight_decay=0.0008)
+    optimizer = torch.optim.Adam(params_to_update, lr=3e-4, weight_decay=0.0008) # params_to_update
     criterion = torch.nn.CrossEntropyLoss().to(device)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 else:
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+    optimizer = torch.optim.Adam(params_to_update, lr=args.lr,
                                  weight_decay=0.0008)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 epochs = 100
