@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from torchvision import models
 from torchvision.transforms import transforms
 from tqdm import tqdm
+import time
 
 from data_aug.contrastive_learning_dataset import RegularDataset
 from data_aug.gaussian_blur import GaussianBlur
@@ -89,7 +90,7 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
 parser.add_argument('-b', '--batch-size',
                     # default=64,
                     # default=100,
-                    default=8,
+                    default=16,
                     type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
@@ -157,13 +158,15 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
 parser.add_argument('--save-model', action='store_true', default=False,
                     help='For Saving the current Model')
 parser.add_argument('--img_size', type=int,
-                    # default=224,
-                    default=32,
+                    default=224,
+                    # default=32,
                     help='the size of the image')
 parser.add_argument('--victim_model_type', type=str,
                     # default='supervised',
                     # default='encoder',
-                    default='simclr',
+                    # default='simclr',
+                    default='random_svhn',
+                    # default='random_cifar10',
                     help='The type of the model from supervised or '
                          'self-supervised learning.')
 parser.add_argument('--aug_gauss_noise', type=float,
@@ -176,6 +179,13 @@ parser.add_argument('--dist_type', type=str,
                     default='cosine',
                     help='The distance type (metric) use to compare the '
                          'difference between the representations.')
+parser.add_argument('--limit_samples', type=int,
+                    default=100,
+                    help='How many samples to take from the train and test '
+                         'sets?')
+parser.add_argument('--num_augments', type=int,
+                    default=100,
+                    help='How many augmentations to create for a given sample?')
 
 
 def info_nce_loss(features, batch_size, device, temperature):
@@ -253,7 +263,8 @@ def load_victim_model(args, test_loader):
         elif args.victim_model_type == 'encoder':
             victim_model = models.resnet50()
             checkpoint = torch.load(
-                "../models/resnet50SimSiam-batch256.pth.tar",
+                # "../models/resnet50SimSiam-batch256.pth.tar",
+                "../../SimCLRmodels/resnet50SimSiam-batch256.pth.tar",
                 map_location="cpu")
             state_dict = checkpoint['state_dict']
             for k in list(state_dict.keys()):
@@ -274,6 +285,25 @@ def load_victim_model(args, test_loader):
             state_dict = checkpoint['state_dict']
             victim_model.load_state_dict(state_dict, strict=False)
             victim_model.fc = torch.nn.Identity()
+        elif args.victim_model_type.startswith('random'):
+            victim_model = ResNet34_8x(num_classes=10)
+            if args.victim_model_type == 'random_svhn':
+                print("Loading SVHN TEACHER")
+                args.ckpt = '../../SimCLRmodels/dfmemodels/svhn-resnet34_8x.pt'
+            elif args.victim_model_type == 'random_cifar10':
+                print("Loading cifar10 TEACHER")
+                args.ckpt = '../../SimCLRmodels/dfmemodels/cifar10-resnet34_8x.pt'
+            else:
+                raise Exception(f"Unknown args.victim_model_type: ",
+                                args.victim_model_type)
+            victim_model.load_state_dict(
+                torch.load(args.ckpt, map_location=device))
+
+            # test_accuracy(model=victim_model, test_loader=test_loader)
+
+            victim_model.linear = torch.nn.Identity().to(device)
+            victim_model.fc = torch.nn.Identity().to(device)
+
 
 
     # 2048 dimensional output
@@ -328,7 +358,7 @@ def get_data_loaders(args):
         args.dataset_train, n_views=1, size=args.img_size)
     # train_dataset = dataset_train.get_dataset(name='cifar10', n_views=1)
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False,
+        train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     # test
@@ -337,13 +367,13 @@ def get_data_loaders(args):
         name=args.dataset_test, n_views=1, size=args.img_size)
     # test_dataset = dataset_test.get_test_dataset(name='svhn', n_views=1)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
+        test_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     return train_loader, test_loader
 
 
-def get_diffs(data_loader, model, dataset_name, limit=50):
+def get_diffs(data_loader, model, dataset_name, limit=100, num_augments=100):
     model = model.to(device)
     num_train = 0
     all_diffs = []
@@ -388,7 +418,6 @@ def get_diffs(data_loader, model, dataset_name, limit=50):
             raw_features = model(raw_images)
 
             # Number of augmentations for a single data point.
-            num_augments = 10
             for _ in range(num_augments):
                 augment_images = []
                 for image in images:
@@ -454,9 +483,13 @@ def store_diffs(args):
     victim_model.eval()
 
     train_diffs = get_diffs(data_loader=train_loader, model=victim_model,
-                            dataset_name=args.dataset_train)
+                            dataset_name=args.dataset_train,
+                            limit=args.limit_samples,
+                            num_augments=args.num_augments)
     test_diffs = get_diffs(data_loader=test_loader, model=victim_model,
-                           dataset_name=args.dataset_test)
+                           dataset_name=args.dataset_test,
+                           limit=args.limit_samples,
+                           num_augments=args.num_augments)
 
     np.save(f'train_diffs_{args.model_type}.npy', train_diffs)
     np.save(f'test_diffs_{args.model_type}.npy', test_diffs)
@@ -492,9 +525,12 @@ def run_ttest(train_diffs, test_diffs, args):
 
 
 def main(args):
+    start = time.time()
     store_diffs(args=args)
     train_diffs, test_diffs = load_diffs(args=args)
     run_ttest(train_diffs=train_diffs, test_diffs=test_diffs, args=args)
+    stop = time.time()
+    print('elapsed time: ', stop - start)
 
 
 if __name__ == "__main__":
