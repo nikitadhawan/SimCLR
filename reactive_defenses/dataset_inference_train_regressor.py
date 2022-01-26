@@ -17,11 +17,13 @@ from getpass import getuser
 
 import numpy as np
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torchvision import models
 from torchvision.transforms import transforms
 from tqdm import tqdm
 import time
+from reactive_defenses.simclr_loss import SimCLR_Loss
 
 from data_aug.contrastive_learning_dataset import RegularDataset
 from data_aug.gaussian_blur import GaussianBlur
@@ -87,17 +89,6 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size',
-                    # default=64,
-                    default=100,
-                    # default=32,
-                    # default=24,
-                    # default=16,
-                    type=int,
-                    metavar='N',
-                    help='mini-batch size (default: 256), this is the total '
-                         'batch size of all GPUs on the current node when '
-                         'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', type=float, default=0.9,
@@ -161,8 +152,8 @@ parser.add_argument('--img_size', type=int,
                     help='the size of the image')
 parser.add_argument('--model_type', type=str,
                     # default='supervised',
-                    default='encoder',
-                    # default='simclr',
+                    # default='encoder',
+                    default='simclr',
                     # default='random_svhn',
                     # default='random_cifar10',
                     help='The type of the model from supervised or '
@@ -173,17 +164,28 @@ parser.add_argument('--aug_gauss_noise', type=float,
                          'Gaussian noise added to an image.')
 parser.add_argument('--dist_type', type=str,
                     # default='L2',
-                    # default='InfoNCE',
-                    default='cosine',
+                    default='InfoNCE',
+                    # default='cosine',
                     help='The distance type (metric) use to compare the '
                          'difference between the representations.')
 parser.add_argument('--limit_samples', type=int,
-                    default=100,
+                    default=1,
                     help='How many samples to take from the train and test '
                          'sets?')
 parser.add_argument('--num_augments', type=int,
-                    default=100,
+                    default=1,
                     help='How many augmentations to create for a given sample?')
+parser.add_argument('-b', '--batch-size',
+                    # default=64,
+                    # default=100,
+                    # default=32,
+                    # default=24,
+                    default=16,
+                    type=int,
+                    metavar='N',
+                    help='mini-batch size (default: 256), this is the total '
+                         'batch size of all GPUs on the current node when '
+                         'using Data Parallel or Distributed Data Parallel')
 
 
 def info_nce_loss(features, batch_size, device, temperature):
@@ -412,6 +414,8 @@ def get_diffs(data_loader, model, dataset_name, limit=100, num_augments=100):
             if isinstance(images, list) and len(images) == 1:
                 images = images[0]
 
+            batch_diffs = []
+
             raw_images = images.to(device)
             raw_features = model(raw_images)
 
@@ -431,7 +435,7 @@ def get_diffs(data_loader, model, dataset_name, limit=100, num_augments=100):
                     diff = torch.sum(diff, dim=-1)
                     diff = torch.sqrt(diff)
                     diff = diff.detach().cpu().numpy()
-                    all_diffs.append(list(diff))
+                    batch_diffs.append(list(diff))
                 elif args.dist_type == 'InfoNCE':
                     all_features = torch.cat([raw_features, augment_features],
                                              dim=0)
@@ -439,16 +443,23 @@ def get_diffs(data_loader, model, dataset_name, limit=100, num_augments=100):
                         features=all_features, batch_size=args.batch_size,
                         device=device, temperature=args.temperature)
                     criterion = torch.nn.CrossEntropyLoss().to(device)
-                    loss = criterion(logits, labels)
-                    all_diffs.append(loss)
+                    diff = criterion(logits, labels)
+
+                    # simclr_loss = SimCLR_Loss(batch_size=args.batch_size,
+                    #                           temperature=args.temperature)
+                    # diff = simclr_loss.forward(z_i=raw_features, z_j=augment_features)
+
+                    batch_diffs.append(diff.item())
                 elif args.dist_type == 'cosine':
                     cos = torch.nn.CosineSimilarity(dim=1, eps=1e-8)
                     dist = cos(raw_features, augment_features)
-                    dist = dist.detach().cpu().numpy()
-                    all_diffs.append(list(dist))
+                    diff = dist.detach().cpu().numpy()
+                    batch_diffs.append(list(diff))
                 else:
                     raise Exception(
                         f"Unknown args.dist_type: {args.dist_type}.")
+
+            all_diffs.append(batch_diffs)
 
             num_train += len(images)
             if num_train >= limit:
@@ -505,9 +516,48 @@ def load_diffs(args):
     return train_diffs, test_diffs
 
 
+def prepare_dataset_regressor(args, train_features, test_features):
+    train_set_frac = 0.9
+
+    num_train = int(train_set_frac * len(train_features))
+    train_features_train_set = train_features[:num_train]
+    train_features_test_set = train_features[num_train:]
+
+    num_train = int(train_set_frac * len(test_features))
+    test_features_train_set = test_features[:num_train]
+    test_features_test_set = test_features[num_train:]
+
+    # train set
+    train_loader = get_data_loader(train_features=train_features_train_set,
+                                   test_features=test_features_train_set)
+
+    # test set
+    test_loader = get_data_loader(train_features=train_features_test_set,
+                                  test_features=test_features_test_set)
+
+    return train_loader, test_loader
+
+
+def train_regressor(train_diffs, test_diffs, args):
+    model = nn.Sequential(nn.Linear(args.num_augments, 100), nn.ReLU(),
+                          nn.Linear(100, 1), nn.Tanh())
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    with tqdm(range(1000)) as pbar:
+        for epoch in pbar:
+            optimizer.zero_grad()
+            inputs = train
+            outputs = model(inputs)
+            loss = -1 * ((2 * y - 1) * (outputs.squeeze(-1))).mean()
+            loss.backward()
+            optimizer.step()
+            pbar.set_description('loss {}'.format(loss.item()))
+
+
 def run_ttest(train_diffs, test_diffs, args):
-    train_diffs = np.concatenate(train_diffs)
-    test_diffs = np.concatenate(test_diffs)
+    print('t-test:')
+    print('train_diffs shape: ', train_diffs.shape)
+    print('test_diffs shape: ', test_diffs.shape)
 
     mean_train = np.mean(train_diffs)
     print(f'mean_train {args.dataset_train} distances: ', mean_train)
@@ -529,7 +579,11 @@ def run_ttest(train_diffs, test_diffs, args):
 def main(args):
     start = time.time()
     store_diffs(args=args)
+
     train_diffs, test_diffs = load_diffs(args=args)
+    train_diffs = train_diffs.flatten()
+    test_diffs = test_diffs.flatten()
+
     run_ttest(train_diffs=train_diffs, test_diffs=test_diffs, args=args)
     stop = time.time()
     print('elapsed time: ', stop - start)
