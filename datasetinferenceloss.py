@@ -7,10 +7,10 @@ import torch
 torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset
-from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP
+from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP, HeadSimCLR
+from models.resnet import ResNetSimCLRV2 as ResNetSimCLRNEW
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 from utils import load_victim, load_watermark, accuracy, print_args
 import os
@@ -66,7 +66,7 @@ parser.add_argument('--fp16-precision', action='store_true',
                     help='Whether or not to use 16-bit precision GPU training.')
 
 parser.add_argument('--out_dim', default=128, type=int,
-                    help='feature dimension (default: 128)')
+                    help='head feature (z) dimension (default: 128)')
 parser.add_argument('--log-every-n-steps', default=200, type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature', default=0.07, type=float,
@@ -84,7 +84,7 @@ parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use')
 parser.add_argument('--lossvictim', default='infonce', type=str,
                     help='Loss function victim was trained with')
-parser.add_argument('--victimhead', default='False', type=str,
+parser.add_argument('--victimhead', default='True', type=str,  # Set to true
                     help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
                     help='Use an additional head while training the stolen model.', choices=['True', 'False'])
@@ -138,10 +138,10 @@ val_loader = torch.utils.data.DataLoader(
 test_dataset = dataset.get_test_dataset(args.dataset,
                                                  args.n_views)
 #
-if args.dataset != "imagenet":
-    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    test_dataset = torch.utils.data.Subset(test_dataset,
-                                               indxs) # prevent overlap with queries
+# if args.dataset != "imagenet":
+#     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+#     test_dataset = torch.utils.data.Subset(test_dataset,
+#                                                indxs) # prevent overlap with queries
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -227,20 +227,32 @@ if args.dataset == "imagenet":
         del state_dict
     # 2048 dimensional output
 elif args.victimhead == "False":
-    victim_model = ResNetSimCLRV2(base_model=args.arch,
+    victim_model = ResNetSimCLRNEW(base_model=args.arch,
                                   out_dim=args.out_dim, loss=args.lossvictim,
                                   include_mlp=False).to(device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                args.arch, args.lossvictim,
                                device=device, discard_mlp=True,
                                watermark=args.watermark, entropy=args.entropy)
-else:
-    victim_model = ResNetSimCLRV2(base_model=args.arch,
+else:  # We use this option when computing the loss with the head
+    victim_model = ResNetSimCLRNEW(base_model=args.arch,
                                   out_dim=args.out_dim, loss=args.lossvictim,
                                   include_mlp=True).to(device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                args.arch, args.lossvictim,
                                device=device)
+    only_head = HeadSimCLR(out_dim=args.out_dim).to(device)
+    checkpoint = torch.load(
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.lossvictim}TRAIN/{args.dataset}_checkpoint_{args.epochstrain}_{args.lossvictim}.pth.tar",
+            map_location=device)
+    state_dict = checkpoint['state_dict']
+    new_state_dict = {}
+    for k in list(state_dict.keys()):
+        if k.startswith('backbone.fc'):
+            new_state_dict[k[len("backbone."):]] = state_dict[k]
+    only_head.load_state_dict(new_state_dict, strict=False)
+    del state_dict
+    print("Loaded victim head")
 
 
 
@@ -302,6 +314,8 @@ victim_model.eval()
 stolen_model.eval()
 # random_model.eval()
 random_model2.eval()
+if args.victimhead == "True":
+    only_head.eval()
 
 print("Loaded models.")
 
@@ -314,28 +328,30 @@ with torch.no_grad():
         images = images.to(device)
 
         victim_features = victim_model(images)
-        print("Victim features shape", victim_features.shape)
         stolen_features = stolen_model(images)
         random_features2 = random_model2(images)
+        if args.victimhead == "True":
+            stolen_features = only_head(stolen_features)
+            random_features2 = only_head(random_features2)
         logits, labels = info_nce_loss(victim_features, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
         victimtrain.append(loss.item())
-        print("loss1", loss)
+        #print("loss1", loss)
         logits, labels = info_nce_loss(random_features2, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
-        print("loss2", loss)
+        #print("loss2", loss)
         randomtrain.append(loss.item())
         logits, labels = info_nce_loss(stolen_features, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
-        print("loss3", loss)
+        #print("loss3", loss)
         stolentrain.append(loss.item())
-        if counter >= 1:
+        if counter >= 200:
             break
 
 
@@ -351,45 +367,79 @@ with torch.no_grad():
         victim_features = victim_model(images)
         stolen_features = stolen_model(images)
         random_features2 = random_model2(images)
+        if args.victimhead == "True":
+            stolen_features = only_head(stolen_features)
+            random_features2 = only_head(random_features2)
+            # print("victim", victim_features.shape)
+            # print("stolen", stolen_features.shape)
         logits, labels = info_nce_loss(victim_features, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
         victimtest.append(loss.item())
-        print("loss1", loss)
+        #print("loss1", loss)
         logits, labels = info_nce_loss(random_features2, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
-        print("loss2", loss)
+        #print("loss2", loss)
         randomtest.append(loss.item())
         logits, labels = info_nce_loss(stolen_features, args)
         logits = logits.to(device)
         labels = labels.to(device)
         loss = criterion(logits, labels)
-        print("loss3", loss)
+        #print("loss3", loss)
         stolentest.append(loss.item())
-        if counter >= 1:
+        if counter >= 200:
             break
 
 
-    tval, pval = ttest(randomtrain, randomtest, alternative="two.sided")
-    print('Null hypothesis for random: training loss == testing loss', ' pval: ', pval)
+def run_ttest(train_losses, test_losses, args):
+    print('t-test:')
+    print('train_losses shape: ', train_losses.shape)
+    print('test_losses shape: ', test_losses.shape)
 
-    tval, pval = ttest(victimtrain, victimtest, alternative="two.sided")
-    print('Null hypothesis for victim: training loss == testing loss', ' pval: ', pval)
+    mean_train = np.mean(train_losses)
+    print(f'mean_train {args.dataset} losses: ', mean_train)
+    print('median_train: ', np.median(train_losses))
 
-    tval, pval = ttest(stolentrain, stolentest, alternative="two.sided")
-    print('Null hypothesis for stolen: training loss == testing loss', ' pval: ', pval)
+    mean_test = np.mean(test_losses)
+    print(f'mean_test {args.dataset} losses: ', mean_test)
+    print('median_test: ', np.median(test_losses))
+
+    tval, pval = ttest(test_losses, train_losses, alternative="greater")
+    print('Null hypothesis: losses test <= losses train')
+    print('delta u: ', mean_test - mean_train, ' pval: ', pval, 'tval: ', tval)
+
+    tval, pval = ttest(train_losses, test_losses, alternative="greater")
+    print('Null hypothesis: losses train <= losses test')
+    print('delta u: ', mean_train - mean_test, ' pval: ', pval, 'tval: ', tval)
 
 
-    print(f"r_train: {np.mean(randomtrain)} +- {np.std(randomtrain)}")
-    print(f"r_test: {np.mean(randomtest)} +- {np.std(randomtest)}")
+print("Running t test for victim model")
+run_ttest(np.array(victimtrain), np.array(victimtest), args)
+print("Running t test for stolen model")
+run_ttest(np.array(stolentrain), np.array(stolentest), args)
+print("Running t test for random model")
+run_ttest(np.array(randomtrain), np.array(randomtest), args)
 
-    print(f"s_train: {np.mean(stolentrain)} +- {np.std(stolentrain)}")
-    print(f"s_test: {np.mean(stolentest)} +- {np.std(stolentest)}")
+    # tval, pval = ttest(randomtrain, randomtest, alternative="two.sided")
+    # print('Null hypothesis for random: training loss == testing loss', ' pval: ', pval)
 
-    print(f"v_train: {np.mean(victimtrain)} +- {np.std(victimtrain)}")
-    print(f"v_test: {np.mean(victimtest)} +- {np.std(victimtest)}")
+    # tval, pval = ttest(victimtrain, victimtest, alternative="two.sided")
+    # print('Null hypothesis for victim: training loss == testing loss', ' pval: ', pval)
+
+    # tval, pval = ttest(stolentrain, stolentest, alternative="two.sided")
+    # print('Null hypothesis for stolen: training loss == testing loss', ' pval: ', pval)
+
+
+    # print(f"r_train: {np.mean(randomtrain)} +- {np.std(randomtrain)}")
+    # print(f"r_test: {np.mean(randomtest)} +- {np.std(randomtest)}")
+
+    # print(f"s_train: {np.mean(stolentrain)} +- {np.std(stolentrain)}")
+    # print(f"s_test: {np.mean(stolentest)} +- {np.std(stolentest)}")
+
+    # print(f"v_train: {np.mean(victimtrain)} +- {np.std(victimtrain)}")
+    # print(f"v_test: {np.mean(victimtest)} +- {np.std(victimtest)}")
 
 
