@@ -302,7 +302,7 @@ elif args.arch == 'resnet34':
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
 
-if args.losstype == "symmetrized":
+if args.losstype == "symmetrized" or args.dataset == "imagenet":
     if args.arch == 'resnet18':
         model = torchvision.models.resnet18(pretrained=False,
                                             num_classes=10).to(device)
@@ -318,9 +318,25 @@ if args.modeltype == "victim":
                                          device=device)
     print("Evaluating victim")
 else:
-    model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal, args.num_queries,
-                        device=device)
-    print("Evaluating stolen model")
+    if args.dataset == "imagenet":
+        checkpoint = torch.load(
+                f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/checkpoint_{args.datasetsteal}_{args.losstype}_{args.num_queries}.pth.tar",
+                map_location="cpu")
+        state_dict = checkpoint['state_dict']
+        new_state_dict = {}
+        for k in list(state_dict.keys()):
+            if k.startswith('module.backbone.'):
+                if k.startswith('module.backbone.') and not k.startswith('module.backbone.fc'):
+                    # remove prefix
+                    new_state_dict[k[len("module.backbone."):]] = state_dict[k]
+            else:
+                new_state_dict[k] = state_dict[k]
+        model.load_state_dict(new_state_dict, strict=False)
+        print("Evaluating stolen imagenet")
+    else:
+        model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal, args.num_queries,
+                            device=device)
+        print("Evaluating stolen model")
 
 if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=True, dataset=args.dataset)
