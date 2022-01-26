@@ -302,6 +302,17 @@ elif args.arch == 'resnet34':
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
 
+if args.losstype == "symmetrized":
+    if args.arch == 'resnet18':
+        model = torchvision.models.resnet18(pretrained=False,
+                                            num_classes=10).to(device)
+    elif args.arch == 'resnet34':
+        model = torchvision.models.resnet34(pretrained=False,
+                                            num_classes=10).to(device)
+    elif args.arch == 'resnet50':
+        model = torchvision.models.resnet50(pretrained=False,
+                                            num_classes=10).to(device)
+
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
                                          device=device)

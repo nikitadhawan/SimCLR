@@ -319,7 +319,7 @@ if __name__ == "__main__":
     stolen_model = ResNetSimCLRV2(base_model=args.arch,
                             out_dim=args.out_dim, include_mlp=True).to(device) # stolen model using head
     if args.losstype == "symmetrized":
-        stolen_model = SimSiam(ResNet34, args.out_dim, args.out_dim).to(device)
+        stolen_model = SimSiam(torchvision.models.__dict__[args.arch], args.out_dim, args.out_dim).to(device)
     stolen_model.train()
 
     optimizer = torch.optim.Adam(stolen_model.parameters(), args.lr,   # Maybe change the optimizer
