@@ -39,7 +39,7 @@ class ContrastiveLearningDataset:
 
                           'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled',
                                                           transform=ContrastiveLearningViewGenerator(
-                                                              self.get_simclr_pipeline_transform(96),
+                                                              self.get_simclr_pipeline_transform(32),
                                                               n_views),
                                                           download=True),
 
@@ -74,7 +74,7 @@ class ContrastiveLearningDataset:
 
                           'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
                                                           transform=ContrastiveLearningViewGenerator(
-                                                              self.get_simclr_pipeline_transform(96),
+                                                              self.get_simclr_pipeline_transform(32),
                                                               n_views),
                                                           download=True),
 
@@ -127,7 +127,7 @@ class RegularDataset:
 
                           'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled',
                                                           transform=ContrastiveLearningViewGenerator(
-                                                              self.get_simclr_pipeline_transform(96),
+                                                              self.get_simclr_pipeline_transform(32),
                                                               n_views),
                                                           download=True),
 
@@ -162,7 +162,7 @@ class RegularDataset:
 
                           'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
                                                           transform=ContrastiveLearningViewGenerator(
-                                                              self.get_simclr_pipeline_transform(96),
+                                                              self.get_simclr_pipeline_transform(32),
                                                               n_views),
                                                           download=True),
 

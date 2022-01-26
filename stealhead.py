@@ -13,7 +13,8 @@ import os
 import matplotlib.pyplot as plt
 import argparse
 from torch.utils.data import DataLoader
-from models.resnet_simclr import ResNetSimCLRV2, HeadSimCLR, SimSiam, HeadSimSiam
+from models.resnet_simclr import  HeadSimCLR, SimSiam, HeadSimSiam
+from models.resnet import ResNetSimCLRV2
 import torchvision.transforms as transforms
 import torchvision
 import logging
@@ -28,7 +29,7 @@ from loss import soft_cross_entropy, wasserstein_loss, soft_nn_loss, pairwise_eu
 
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
@@ -153,10 +154,13 @@ if __name__ == "__main__":
 
     if args.victimhead == "False":
         victim_model = ResNetSimCLRV2(base_model=args.archvic,
-                                      out_dim=args.out_dim, include_mlp=False).to(device)
+                                      out_dim=args.out_dim,
+                                      loss=args.lossvictim,
+                                      include_mlp=False).to(args.device)
         victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                    args.archvic, args.lossvictim,
-                                   device=device, discard_mlp=True)
+                                   device=args.device, discard_mlp=True)
+        print("vic", victim_model)
     else:
         victim_modelhead = ResNetSimCLRV2(base_model=args.archvic,
                                       out_dim=args.out_dim,
@@ -229,8 +233,10 @@ if __name__ == "__main__":
                 images = torch.cat(images, dim=0)
 
                 images = images.to(device)
+                print("im", images.shape)
 
                 rep = victim_model(images) # h from victim
+                print("s", rep.shape)
                 if args.defence == "True":
                     rep += torch.empty(rep.size()).normal_(mean=0,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 features = head(rep) # pass representation through head being trained.
@@ -340,7 +346,8 @@ if __name__ == "__main__":
                 images = torch.cat(images, dim=0)
                 # Add augmentations / different querying strategies.
                 images = images.to(device)
-                query_features = victim_model(images) # victim model representations
+                with torch.no_grad():
+                    query_features = victim_model(images) # victim model representations
                 query_features = head(query_features)
                 if args.losstype != "symmetrized":
                     features = stolen_model(images) # current stolen model representation: 512x128 (512 images, 128 dimensional output from head)

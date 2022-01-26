@@ -222,11 +222,13 @@ class ResNetSimCLRV2(nn.Module):
     def forward(self, x):
         x = self.backbone.conv1(x)
         x = self.backbone.bn1(x)
+        x = F.relu(x)
         x = self.backbone.layer1(x)
         x = self.backbone.layer2(x)
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
-        x = torch.flatten(x, 1)
+        x = F.avg_pool2d(x, 4)
+        x = x.view(x.size(0), -1)
         if self.include_mlp:
             x = self.backbone.fc(x)
         return x
@@ -235,10 +237,10 @@ class ResNetSimCLRV2(nn.Module):
 
 def trial():
     device = 'cuda'
-    model = ResNetSimCLR(base_model="resnet34", out_dim=128,
-                 entropy=False, include_mlp=False).to(device)
+    model = ResNetSimCLRV2(base_model="resnet34", out_dim=128,include_mlp=False).to(device)
     from torchsummary import summary
     summary(model, input_size = (3,32,32))
+    print(model(torch.rand((1,3,32,32)).cuda()).shape)
 
 
 
