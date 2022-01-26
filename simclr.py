@@ -277,7 +277,8 @@ class SimCLR(object):
             for images, truelabels in tqdm(train_loader):
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
-                query_features = self.victim_model(images) # victim model representations
+                with torch.no_grad():
+                    query_features = self.victim_model(images) # victim model representations
                 if self.args.defence == "True" and self.loss in ["softnn", "infonce"]: # first type of perturbation defence
                     query_features2 = self.victim_head(images)
                     # entropyrep = self.entropy_model(images)
@@ -532,7 +533,8 @@ class SimCLR(object):
             for images, truelabels in tqdm(train_loader):
                 #images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
-                query_features = self.victim_model(images) # victim model representations
+                with torch.no_grad():
+                    query_features = self.victim_model(images) # victim model representations
                 if self.loss != "symmetrized":
                     features = self.model(images) # current stolen model representation: 512x512 (512 images, 512/128 dimensional representation if head not used / if head used)
                 if self.loss == "softce":

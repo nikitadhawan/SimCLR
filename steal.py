@@ -16,7 +16,7 @@ model_names = sorted(name for name in models.__dict__
                      and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
@@ -65,7 +65,7 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations.
+parser.add_argument('--n-views', default=1, type=int, metavar='N',  # use 2 to use multiple augmentations.
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--logdir', default='test', type=str,
@@ -106,7 +106,7 @@ def main():
     if args.losstype in  ["infonce", "softnn", "supcon", "barlow"]:
         args.batch_size = 256
         args.weight_decay = 1e-4
-        args.n_views = 2
+        #args.n_views = 2
     if args.losstype == "infonce":
         args.lr = 0.0003
     if args.losstype == "supcon":
@@ -285,3 +285,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
