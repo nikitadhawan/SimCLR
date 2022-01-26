@@ -233,10 +233,8 @@ if __name__ == "__main__":
                 images = torch.cat(images, dim=0)
 
                 images = images.to(device)
-                print("im", images.shape)
 
                 rep = victim_model(images) # h from victim
-                print("s", rep.shape)
                 if args.defence == "True":
                     rep += torch.empty(rep.size()).normal_(mean=0,std=self.args.sigma).to(self.args.device)  # add random noise to embeddings
                 features = head(rep) # pass representation through head being trained.
