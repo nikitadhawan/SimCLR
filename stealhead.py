@@ -2,6 +2,7 @@
 # This file first recreates the victim head g given access to its 
 # representations. 
 
+from SimCLRICML.models.resnet import ResNet34
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt
 import argparse
 from torch.utils.data import DataLoader
 from models.resnet_simclr import  HeadSimCLR, SimSiam, HeadSimSiam
-from models.resnet import ResNetSimCLRV2
+from models.resnet import ResNetSimCLRV2, ResNet34
 import torchvision.transforms as transforms
 import torchvision
 import logging
@@ -319,7 +320,7 @@ if __name__ == "__main__":
     stolen_model = ResNetSimCLRV2(base_model=args.arch,
                             out_dim=args.out_dim, include_mlp=True).to(device) # stolen model using head
     if args.losstype == "symmetrized":
-        stolen_model = SimSiam(torchvision.models.__dict__[args.arch], args.out_dim, args.out_dim).to(device)
+        stolen_model = SimSiam(ResNet34, args.out_dim, args.out_dim).to(device)
     stolen_model.train()
 
     optimizer = torch.optim.Adam(stolen_model.parameters(), args.lr,   # Maybe change the optimizer
