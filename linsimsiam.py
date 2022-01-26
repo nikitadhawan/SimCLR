@@ -33,7 +33,7 @@ import logging
 
 user = getpass.getuser()
 
-if user == 'akaleem':
+if user in ["akaleem", "ady"]:
     prefix = '/ssd003'
 else:
     prefix = ''
@@ -263,7 +263,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.modeltype == "stolen":
         # log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/"
         # logname = f"testing{args.dataset}{args.num_queries}{args.datasetsteal}.log"
-        if user == "akaleem":
+        if user in ["akaleem", "ady"]:
             log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/SimSiam/"
         else:
             log_dir = "logs/"
@@ -272,9 +272,9 @@ def main_worker(gpu, ngpus_per_node, args):
             filename=os.path.join(log_dir, logname),
             level=logging.DEBUG)
     else:
-        if user == "akaleem":
+        if user in ["akaleem", "ady"]:
             logging.basicConfig(
-                filename=f"/checkpoint/akaleem/SimCLR/SimVIC/testing{args.dataset}.log",
+                filename=f"/checkpoint/{user}/SimCLR/SimVIC/testing{args.dataset}.log",
                 level=logging.DEBUG)
         else:
             logging.basicConfig(
@@ -345,7 +345,7 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.pretrained))
 
     if args.modeltype == "stolen":
-        if user == "akaleem":
+        if user in ["akaleem", "ady"]:
             # checkpoint = torch.load(
             #     f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochssteal}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
             #     map_location="cpu")
@@ -537,7 +537,7 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.Resize(224),
             transforms.ToTensor(),
         ])
-        if user == "akaleem":
+        if user in ["akaleem", "ady"]:
             svhn_path = f'/ssd003/home/{user}/data/SVHN'
         else:
             svhn_path = f'{prefix}/home/{user}/data/svhn'
@@ -562,7 +562,7 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.ToTensor(),
             transforms.Resize(224),
         ])
-        if user == "akaleem":
+        if user in ["akaleem", "ady"]:
             stl_path = f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10"
         else:
             stl_path = f"/home/{user}/data/stl10"
