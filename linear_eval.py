@@ -352,7 +352,8 @@ assert len(parameters) == 2  # fc.weight, fc.bias
 if args.modeltype == "victim":
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
     #                              momentum=0.9, weight_decay=0.0008)
-    optimizer = torch.optim.Adam(params_to_update, lr=3e-4, weight_decay=0.0008) # params_to_update
+    args.lr = 3e-4 # remove if needed
+    optimizer = torch.optim.Adam(params_to_update, lr=args.lr, weight_decay=0.0008) # params_to_update
     criterion = torch.nn.CrossEntropyLoss().to(device)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 else:

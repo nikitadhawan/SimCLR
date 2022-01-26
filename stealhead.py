@@ -32,7 +32,7 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('-dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34')
 parser.add_argument('--archvic', default='resnet34')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
