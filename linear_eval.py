@@ -165,11 +165,11 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
-                                  transform=transforms.ToTensor())
+                                  transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             num_workers=0, drop_last=False, shuffle=shuffle)
     test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
-                                  transform=transforms.ToTensor())
+                                  transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
     test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
