@@ -175,6 +175,7 @@ class RegularDataset:
             'imagenet': lambda: datasets.ImageNet(
                 # root="/scratch/ssd002/datasets/imagenet256/",
                 root=os.path.join(self.root_folder, 'imagenet'),
+                # split='train',
                 split='train',
                 transform=ContrastiveLearningViewGenerator(
                     self.get_imagenet_transform(size), n_views))
