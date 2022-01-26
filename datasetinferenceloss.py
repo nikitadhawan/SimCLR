@@ -310,6 +310,18 @@ random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
 random_model2 = load_victim(100, "cifar10", random_model2,
                            "resnet34", "infonce2",
                            device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+
+# SVHN random model: 
+
+
+random_model2 = ResNetSimCLRNEW(base_model="resnet34", out_dim=128, loss=None,
+                              include_mlp=False).to(
+    device)
+random_model2 = load_victim(200, "svhn", random_model2,
+                           "resnet34", "infonce",
+                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+
+                
 victim_model.eval()
 stolen_model.eval()
 # random_model.eval()
@@ -351,8 +363,8 @@ with torch.no_grad():
         loss = criterion(logits, labels)
         #print("loss3", loss)
         stolentrain.append(loss.item())
-        if counter >= 200:
-            break
+        # if counter >= 200:
+        #     break
 
 
 
@@ -390,8 +402,8 @@ with torch.no_grad():
         loss = criterion(logits, labels)
         #print("loss3", loss)
         stolentest.append(loss.item())
-        if counter >= 200:
-            break
+        # if counter >= 200:
+        #     break
 
 
 def run_ttest(train_losses, test_losses, args):
