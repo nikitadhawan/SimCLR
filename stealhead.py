@@ -2,7 +2,6 @@
 # This file first recreates the victim head g given access to its 
 # representations. 
 
-from SimCLRICML.models.resnet import ResNet34
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
