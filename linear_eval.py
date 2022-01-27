@@ -63,6 +63,8 @@ parser.add_argument('--watermark', default='False', type=str,
                     help='Watermark used when training the model', choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Additional softmax layer when training the model', choices=['True', 'False'])
+parser.add_argument('--victimhead', default='False', type=str,
+                    help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
 args = parser.parse_args()
 
 
@@ -276,6 +278,9 @@ if args.modeltype == "stolen":
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}{args.losstype}.log'
     if args.defence == "True":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
+        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+    if args.victimhead == "True":
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEALWVICH/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     if args.datasetsteal == "imagenet":
         log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.

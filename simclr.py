@@ -30,7 +30,10 @@ class SimCLR(object):
             if self.args.defence == "True":
                 self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
             else:
-                self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
+                if self.args.victimhead == "True":
+                    self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEALWVICH/" # save logs here.
+                else:
+                    self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/"  # save logs here.
         else:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
         self.stealing = stealing
@@ -247,7 +250,6 @@ class SimCLR(object):
             f"Model checkpoint and metadata has been saved at {self.log_dir2}")
 
     def steal(self, train_loader, num_queries, watermark_loader=None):
-        # Note: We use the test set to attack the model.
         self.model.train()
         self.victim_model.eval()
         if self.args.defence == "True":
