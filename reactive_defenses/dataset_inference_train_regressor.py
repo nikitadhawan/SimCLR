@@ -567,6 +567,10 @@ def run_ttest(train_diffs, test_diffs, args):
     print(f'mean_test {args.dataset_test} distances: ', mean_test)
     print('median_test: ', np.median(test_diffs))
 
+    tval, pval = ttest(test_diffs, train_diffs, alternative="two.sided")
+    print('Null hypothesis: distances test = distances train')
+    print('delta u: ', mean_test - mean_train, ' pval: ', pval, 'tval: ', tval)
+
     tval, pval = ttest(test_diffs, train_diffs, alternative="greater")
     print('Null hypothesis: distances test <= distances train')
     print('delta u: ', mean_test - mean_train, ' pval: ', pval, 'tval: ', tval)

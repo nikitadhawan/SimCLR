@@ -123,5 +123,37 @@ def main():
     print("Null hypothesis a == b with p-value of: ", pval)
 
 
+def run_ttest(random, stolen):
+    print('t-test:')
+
+    print('random shape: ', random.shape)
+    print('stolen shape: ', stolen.shape)
+
+    print('mean random: ', np.mean(random))
+    print('median random: ', np.median(random))
+
+    print('mean stolen: ', np.mean(stolen))
+    print('median stolen: ', np.median(stolen))
+
+    mean_random = np.mean(random)
+    mean_stolen = np.mean(stolen)
+
+    tval, pval = ttest(stolen, random, alternative="two.sided")
+    print('Null hypothesis: stolen = random')
+    print('delta u: ', mean_stolen - mean_random, ' pval: ', pval, 'tval: ',
+          tval)
+
+    tval, pval = ttest(stolen, random, alternative="greater")
+    print('Null hypothesis: stolen <= random')
+    print('delta u: ', mean_stolen - mean_random, ' pval: ', pval, 'tval: ',
+          tval)
+
+    tval, pval = ttest(random, stolen, alternative="greater")
+    print('Null hypothesis: random <= stolen')
+    print('delta u: ', mean_random - mean_stolen, ' pval: ', pval, 'tval: ',
+          tval)
+
+
 if __name__ == "__main__":
     main()
+    # run_ttest()
