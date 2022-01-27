@@ -579,6 +579,30 @@ def main_worker(gpu, ngpus_per_node, args):
             test_dataset, batch_size=2 * args.batch_size,
             num_workers=args.workers, drop_last=False, shuffle=False)
 
+    elif args.dataset == 'fmnist':
+
+        transform_fmnist = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+            transforms.Resize(224),
+        ])
+        if user in ["akaleem", "ady"]:
+            fmnist_path = f'/ssd003/home/{user}/data/'
+        else:
+            fmnist_path = f'{prefix}/home/{user}/data/'
+        train_dataset = datasets.FashionMNIST(
+            fmnist_path, train=True,
+            download=True, transform=transform_fmnist)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, num_workers=args.workers,
+            drop_last=False, shuffle=True)
+        test_dataset = datasets.FashionMNIST(
+            fmnist_path, train=False, download=True,
+            transform=transform_fmnist)
+        val_loader = torch.utils.data.DataLoader(
+            test_dataset, batch_size=2 * args.batch_size,
+            num_workers=args.workers, drop_last=False, shuffle=False)
+
     elif args.dataset == 'caltech101':
         # https://colab.research.google.com/github/ashishpatel26/Awesome-Pytorch-Tutorials/blob/main/17.Pytorch%20Transfer%20learning%20with%20Caltech101.ipynb#scrollTo=8be0ysxctuEw
         train_transforms = transforms.Compose([
