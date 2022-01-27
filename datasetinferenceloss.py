@@ -30,7 +30,7 @@ parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('--datasetsteal', default='cifar10',
+parser.add_argument('--datasetsteal', default='svhn',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names,
@@ -242,9 +242,14 @@ else:  # We use this option when computing the loss with the head
                                args.arch, args.lossvictim,
                                device=device)
     only_head = HeadSimCLR(out_dim=args.out_dim).to(device)
-    checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.lossvictim}TRAIN/{args.dataset}_checkpoint_{args.epochstrain}_{args.lossvictim}.pth.tar",
-            map_location=device)
+    if os.getenv('USER') in ["nicolas", "dockuser"]:
+        checkpoint = torch.load(
+                f"/home/nicolas/code/SimCLRmodels/newmodels/{args.dataset}_checkpoint_{args.epochstrain}_{args.lossvictim}.pth.tar",
+                map_location=device)
+    else:
+        checkpoint = torch.load(
+                f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.lossvictim}TRAIN/{args.dataset}_checkpoint_{args.epochstrain}_{args.lossvictim}.pth.tar",
+                map_location=device)
     state_dict = checkpoint['state_dict']
     new_state_dict = {}
     for k in list(state_dict.keys()):
@@ -275,12 +280,16 @@ if args.dataset == "imagenet":
     del state_dict
 
 else:
-    stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=128, loss=None,
+    stolen_model = ResNetSimCLRNEW(base_model=args.arch, out_dim=128, loss=None,
                                   include_mlp=False).to(device)
-    # mse loss for victim for first tests.
-    checkpoint = torch.load(
-                f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
-                map_location=device)
+    if os.getenv('USER') in ["nicolas", "dockuser"]:
+        checkpoint = torch.load(
+                    f"/home/nicolas/code/SimCLRmodels/newmodels/{args.epochs}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
+                    map_location=device)
+    else:
+        checkpoint = torch.load(
+                    f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/stolen_checkpoint_{args.num_queries}_{args.losstype}_{args.datasetsteal}.pth.tar",
+                    map_location=device)
     state_dict = checkpoint['state_dict']
     stolen_model.load_state_dict(state_dict)
 
@@ -298,18 +307,18 @@ else:
     #             map_location=device)
     #
 # random_dict = checkpoint2['state_dict']
-random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
-#random_model.load_state_dict(random_dict)
-random_model = load_victim(50, "cifar10", random_model,
-                               "resnet18", "infonce",
-                               device=device, discard_mlp=True)
-
-random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
-                              include_mlp=False).to(
-    device)
-random_model2 = load_victim(100, "cifar10", random_model2,
-                           "resnet34", "infonce2",
-                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+# random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
+# #random_model.load_state_dict(random_dict)
+# random_model = load_victim(50, "cifar10", random_model,
+#                                "resnet18", "infonce",
+#                                device=device, discard_mlp=True)
+#
+# random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
+#                               include_mlp=False).to(
+#     device)
+# random_model2 = load_victim(100, "cifar10", random_model2,
+#                            "resnet34", "infonce2",
+#                            device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
 
 # SVHN random model: 
 

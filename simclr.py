@@ -34,6 +34,8 @@ class SimCLR(object):
                     self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEALWVICH/" # save logs here.
                 else:
                     self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/"  # save logs here.
+            if os.getenv('USER') in ["nicolas", "dockuser"]:
+                self.log_dir2 = f"/home/nicolas/code/SimCLRmodels/newmodels/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/"  # save logs here.
         else:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLR/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
         self.stealing = stealing
