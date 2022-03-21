@@ -37,7 +37,11 @@ def accuracy(output, target, topk=(1,)):
 
 def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False,
                 watermark="False", entropy="False"):
-    if watermark == "True":
+    if os.getenv('USER') in ["nicolas", "dockuser"]:
+        checkpoint = torch.load(
+            f"/home/nicolas/code/SimCLRmodels/newmodels/{dataset}_checkpoint_{epochs}_{loss}.pth.tar", # to run on nic1
+            map_location=device)
+    elif watermark == "True":
         checkpoint = torch.load(
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}WATERMARK.pth.tar",
             map_location=device)
