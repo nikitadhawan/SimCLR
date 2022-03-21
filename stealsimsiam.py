@@ -123,7 +123,7 @@ parser.add_argument('--useaug', default='True', type=str,
                     help='Use augmentations with stealing')
 parser.add_argument('--datasetsteal', default='cifar10', type=str,
                     help='dataset used for querying')
-parser.add_argument('--temperature', default=0.07, type=float,
+parser.add_argument('--temperature', default=0.1, type=float,
                     help='softmax temperature (default: 0.07)')
 parser.add_argument('--temperaturesn', default=1000, type=float,
                     help='temperature for soft nearest neighbors loss')
