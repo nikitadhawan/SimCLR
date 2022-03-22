@@ -48,7 +48,7 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=1, type=int,   # use 1 when using MSE loss
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -84,8 +84,8 @@ parser.add_argument('--losstype', default='mse', type=str,
                     help='Loss function to use')
 parser.add_argument('--lossvictim', default='infonce', type=str,
                     help='Loss function victim was trained with')
-parser.add_argument('--victimhead', default='True', type=str,  # Set to true
-                    help='Access to victim head while (g) while getting representations', choices=['True', 'False'])
+parser.add_argument('--victimhead', default='False', type=str,  #
+                    help='Using victim head when computing loss for victim', choices=['True', 'False'])
 parser.add_argument('--stolenhead', default='False', type=str,
                     help='Use an additional head while training the stolen model.', choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
@@ -137,11 +137,7 @@ val_loader = torch.utils.data.DataLoader(
 
 test_dataset = dataset.get_test_dataset(args.dataset,
                                                  args.n_views)
-#
-# if args.dataset != "imagenet":
-#     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-#     test_dataset = torch.utils.data.Subset(test_dataset,
-#                                                indxs) # prevent overlap with queries
+
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, drop_last=True)
@@ -173,20 +169,11 @@ def info_nce_loss(features, args):
     features = F.normalize(features, dim=1)
 
     similarity_matrix = torch.matmul(features, features.T)
-    # assert similarity_matrix.shape == (
-    #     args.n_views * args.batch_size, args.n_views * args.batch_size)
-    # assert similarity_matrix.shape == labels.shape
-
-    # discard the main diagonal from both: labels and similarities matrix
     mask = torch.eye(labels.shape[0], dtype=torch.bool)
     labels = labels[~mask].view(labels.shape[0], -1)
     similarity_matrix = similarity_matrix[~mask].view(
         similarity_matrix.shape[0], -1)
-    # assert similarity_matrix.shape == labels.shape
-    # select and combine multiple positives
     positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
-
-    # select only the negatives
     negatives = similarity_matrix[~labels.bool()].view(
         similarity_matrix.shape[0], -1)
     logits = torch.cat([positives, negatives], dim=1)
@@ -197,9 +184,10 @@ def info_nce_loss(features, args):
 
 criterion = nn.CrossEntropyLoss().to(device)
 criterion2 = nn.CosineSimilarity(dim=1)
+criterion3 = nn.MSELoss().to(device) # MSE
 
 if args.dataset == "imagenet":
-    raise ValueError("Check this part of the code again")
+    raise ValueError("Check this part of the code again i.e. add code for imagenet testing again")
     # currently loads SimCLR pretrained model. we may also want to try this for SimSiam
     # args.arch = "resnet50"
     # if args.victim_model_type == 'supervised':
@@ -343,86 +331,72 @@ with torch.no_grad():
     for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
         images = torch.cat(images, dim=0)
         images = images.to(device)
+        x1 = images[0].unsqueeze(dim=0)
+        x2 = images[1].unsqueeze(dim=0) # first and second augmented views for each image
 
-        victim_features = victim_model(images)
-        stolen_features = stolen_model(images)
-        random_features2 = random_model2(images)
+        victim_features_1 = victim_model(x1)
+        stolen_features_1 = stolen_model(x1)
+        random_features2_1 = random_model2(x1)
+        victim_features_2 = victim_model(x2)
+        stolen_features_2 = stolen_model(x2)
+        random_features2_2 = random_model2(x2)   # compute representations of all 3 models on both views
         if args.victimhead == "True":
-            stolen_features = only_head(stolen_features)
-            random_features2 = only_head(random_features2)
-        logits, labels = info_nce_loss(victim_features, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
+            stolen_features_1 = only_head(stolen_features_1)
+            stolen_features_2 = only_head(stolen_features_2)
+            #random_features2 = only_head(random_features2)
+        loss = criterion3(victim_features_1, victim_features_2)
         victimtrain.append(loss.item())
-        #print("loss1", loss)
-        logits, labels = info_nce_loss(random_features2, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
-        #print("loss2", loss)
+        loss = criterion3(random_features2_1, random_features2_2)
         randomtrain.append(loss.item())
-        logits, labels = info_nce_loss(stolen_features, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
-        #print("loss3", loss)
-        stolentrain.append(loss.item())
-        # if counter >= 200:
-        #     break
+        loss = criterion3(stolen_features_1, stolen_features_2)
+        stolentrain.append(loss.item())   # loss for all 3 models
+        if counter >= 2000:
+            break
 
 
     for counter, (images, truelabels) in enumerate(tqdm(test_loader)):
         images = torch.cat(images, dim=0)
         images = images.to(device)
 
-        victim_features = victim_model(images)
-        stolen_features = stolen_model(images)
-        random_features2 = random_model2(images)
-        if args.victimhead == "True":
-            stolen_features = only_head(stolen_features)
-            random_features2 = only_head(random_features2)
-            # print("victim", victim_features.shape)
-            # print("stolen", stolen_features.shape)
-        logits, labels = info_nce_loss(victim_features, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
-        victimtest.append(loss.item())
-        #print("loss1", loss)
-        logits, labels = info_nce_loss(random_features2, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
-        #print("loss2", loss)
-        randomtest.append(loss.item())
-        logits, labels = info_nce_loss(stolen_features, args)
-        logits = logits.to(device)
-        labels = labels.to(device)
-        loss = criterion(logits, labels)
-        #print("loss3", loss)
-        stolentest.append(loss.item())
-        # if counter >= 200:
-        #     break
+        x1 = images[0].unsqueeze(dim=0)
+        x2 = images[1].unsqueeze(dim=0)  # first and second augmented views for each image
 
-print(victimtrain)
-plt.hist(victimtrain, density=True, bins=20)
-plt.savefig('plots/victimtrain.jpg')
+        victim_features_1 = victim_model(x1)
+        stolen_features_1 = stolen_model(x1)
+        random_features2_1 = random_model2(x1)
+        victim_features_2 = victim_model(x2)
+        stolen_features_2 = stolen_model(x2)
+        random_features2_2 = random_model2(x2)  # compute representations of all 3 models on both views
+        if args.victimhead == "True":
+            stolen_features_1 = only_head(stolen_features_1)
+            stolen_features_2 = only_head(stolen_features_2)
+            #random_features2 = only_head(random_features2)
+        loss = criterion3(victim_features_1, victim_features_2)
+        victimtest.append(loss.item())
+        loss = criterion3(random_features2_1, random_features2_2)
+        randomtest.append(loss.item())
+        loss = criterion3(stolen_features_1, stolen_features_2)
+        stolentest.append(loss.item())
+        if counter >= 2000:
+            break
+
+plt.hist(victimtrain, density=True, bins='auto', label="train")
+plt.hist(victimtest, density=True, bins='auto', label="test")
+plt.title("Victim")
+plt.legend(loc='upper right')
+plt.savefig('plots/victim.jpg')
 plt.close()
-plt.hist(victimtest, density=True, bins=20)
-plt.savefig('plots/victimtest.jpg')
+plt.hist(stolentrain, density=True, bins='auto', label="train")
+plt.hist(stolentest, density=True, bins='auto', label="test")
+plt.legend(loc='upper right')
+plt.title("Stolen")
+plt.savefig('plots/stolen.jpg')
 plt.close()
-plt.hist(stolentrain, density=True, bins=20)
-plt.savefig('plots/stolentrain.jpg')
-plt.close()
-plt.hist(stolentest, density=True, bins=20)
-plt.savefig('plots/stolentest.jpg')
-plt.close()
-plt.hist(randomtrain, density=True, bins=20)
-plt.savefig('plots/randomtrain.jpg')
-plt.close()
-plt.hist(randomtest, density=True, bins=20)
-plt.savefig('plots/randomtest.jpg')
+plt.hist(randomtrain, density=True, bins='auto', label="train")
+plt.hist(randomtest, density=True, bins='auto', label="test")
+plt.legend(loc='upper right')
+plt.title("Random")
+plt.savefig('plots/random.jpg')
 plt.close()
 
 

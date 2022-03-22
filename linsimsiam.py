@@ -673,7 +673,7 @@ def main_worker(gpu, ngpus_per_node, args):
         train(train_loader, model, criterion, optimizer, epoch, args)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        acc1 = validate(val_loader, model, criterion, epoch, args)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -745,7 +745,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             progress.display(i)
 
 
-def validate(val_loader, model, criterion, args):
+def validate(val_loader, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -783,10 +783,10 @@ def validate(val_loader, model, criterion, args):
                 progress.display(i)
 
         # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
-        logging.debug(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+        print(' Epoch: {epoch} * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+              .format(epoch=epoch, top1=top1, top5=top5))
+        logging.debug(' Epoch: {epoch} * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+              .format(epoch = epoch, top1=top1, top5=top5))
 
     return top1.avg
 
