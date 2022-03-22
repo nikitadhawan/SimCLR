@@ -19,7 +19,8 @@ from tqdm import tqdm
 from statistical_tests.t_test import ttest
 import numpy as np
 import matplotlib.pyplot as plt
-
+import seaborn as sns
+sns.set(font_scale=1.0, style='whitegrid', rc={"grid.linewidth": 1.})
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -103,7 +104,8 @@ parser.add_argument('--entropy', default='False', type=str,
 parser.add_argument('--victim_model_type', type=str,
                     # default='supervised',
                     # default='encoder',
-                    default='simclr',
+                    default='simsiam',
+                    choices=['simclr','simsiam','encoder','supervised'],
                     help='The type of the model from supervised or '
                          'self-supervised learning.')
 parser.add_argument('--dist_type', type=str,
@@ -118,6 +120,13 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
+
+if args.dataset == "imagenet":  # manually set parameters in the case of imagenet
+    args.arch = "resnet50"
+    args.archstolen = "resnet50"
+    args.datasetsteal = "imagenet"
+    args.num_queries = 100000
+    args.losstype = "infonce"
 dataset = ContrastiveLearningDataset(args.data)
 dataset2 = RegularDataset(args.data)
 assert args.n_views == 2
@@ -187,35 +196,53 @@ criterion2 = nn.CosineSimilarity(dim=1)
 criterion3 = nn.MSELoss().to(device) # MSE
 
 if args.dataset == "imagenet":
-    raise ValueError("Check this part of the code again i.e. add code for imagenet testing again")
-    # currently loads SimCLR pretrained model. we may also want to try this for SimSiam
-    # args.arch = "resnet50"
-    # if args.victim_model_type == 'supervised':
-    #     victim_model = models.resnet50(pretrained=True).to(device)
-    #     victim_model.fc = torch.nn.Identity().to(device)
-    # else:
-    #     class ResNet50v2(nn.Module):
-    #         def __init__(self, pretrained, num_classes=10):
-    #             super(ResNet50v2, self).__init__()
-    #             self.pretrained = pretrained
-    #
-    #         def forward(self, x):
-    #             x = self.pretrained(x)
-    #             return x
-    #
-    #
-    #     victim_model= resnet50rep().to(device)
-    #     checkpoint = torch.load(
-    #             f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location="cpu")
-    #     state_dict = checkpoint['state_dict']
-    #     new_state_dict = state_dict.copy()
-    #     # for k in state_dict.keys():
-    #     #     if k.startswith('fc.'):
-    #     #         del new_state_dict[k]
-    #
-    #     victim_model.load_state_dict(new_state_dict, strict=False)
-    #     del state_dict
-    # # 2048 dimensional output
+    if args.victim_model_type == "simsiam":
+        victim_model = models.__dict__[args.arch]()
+        checkpoint = torch.load(
+            "models/checkpoint_0099-batch256.pth.tar",
+            map_location="cpu")
+        state_dict = checkpoint['state_dict']
+        for k in list(state_dict.keys()):
+            # retain only encoder up to before the embedding layer
+            if k.startswith('module.encoder') and not k.startswith(
+                    'module.encoder.fc'):
+                # remove prefix
+                state_dict[k[len("module.encoder."):]] = state_dict[k]
+            # delete renamed or unused k
+            del state_dict[k]
+        # print("state dict", state_dict.keys())
+        victim_model.load_state_dict(state_dict, strict=False)
+        victim_model.fc = torch.nn.Identity()
+        victim_model = victim_model.to(device)
+    # For SimCLR pretrained model
+    elif args.victim_model_type == "simclr":
+        args.arch = "resnet50"
+        if args.victim_model_type == 'supervised':
+            victim_model = models.resnet50(pretrained=True).to(device)
+            victim_model.fc = torch.nn.Identity().to(device)
+        else:
+            class ResNet50v2(nn.Module):
+                def __init__(self, pretrained, num_classes=10):
+                    super(ResNet50v2, self).__init__()
+                    self.pretrained = pretrained
+
+                def forward(self, x):
+                    x = self.pretrained(x)
+                    return x
+
+
+            victim_model= resnet50rep().to(device)
+            checkpoint = torch.load(
+                    f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location="cpu")
+            state_dict = checkpoint['state_dict']
+            new_state_dict = state_dict.copy()
+            # for k in state_dict.keys():
+            #     if k.startswith('fc.'):
+            #         del new_state_dict[k]
+
+            victim_model.load_state_dict(new_state_dict, strict=False)
+            del state_dict
+        # 2048 dimensional output
 elif args.victimhead == "False":
     victim_model = ResNetSimCLRNEW(base_model=args.arch,
                                   out_dim=args.out_dim, loss=args.lossvictim,
@@ -383,6 +410,8 @@ with torch.no_grad():
 plt.hist(victimtrain, density=True, bins='auto', label="train")
 plt.hist(victimtest, density=True, bins='auto', label="test")
 plt.title("Victim")
+plt.xlabel("Loss")
+plt.ylabel("Scaled frequency")
 plt.legend(loc='upper right')
 plt.savefig('plots/victim.jpg')
 plt.close()
@@ -390,12 +419,16 @@ plt.hist(stolentrain, density=True, bins='auto', label="train")
 plt.hist(stolentest, density=True, bins='auto', label="test")
 plt.legend(loc='upper right')
 plt.title("Stolen")
+plt.xlabel("Loss")
+plt.ylabel("Scaled frequency")
 plt.savefig('plots/stolen.jpg')
 plt.close()
 plt.hist(randomtrain, density=True, bins='auto', label="train")
 plt.hist(randomtest, density=True, bins='auto', label="test")
 plt.legend(loc='upper right')
 plt.title("Random")
+plt.xlabel("Loss")
+plt.ylabel("Scaled frequency")
 plt.savefig('plots/random.jpg')
 plt.close()
 

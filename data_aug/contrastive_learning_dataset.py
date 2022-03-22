@@ -51,7 +51,7 @@ class ContrastiveLearningDataset:
                                                               n_views),
                                                           download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='train',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_simclr_pipeline_transform(
@@ -86,7 +86,7 @@ class ContrastiveLearningDataset:
                                                             n_views),
                                                         download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='val',
                               transform=ContrastiveLearningViewGenerator(
                                   self.get_simclr_pipeline_transform(
@@ -252,7 +252,7 @@ class WatermarkDataset:
                               split='val',
                               transform=WatermarkViewGenerator(
                                   self.get_imagenet_transform(
-                                      32),
+                                      224),
                                   n_views))
                           }
 
@@ -351,7 +351,7 @@ class ImageNetDataset:
                                                             ]),
                                                         download=True),
                           'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
+                              root="/scratch/ssd002/datasets/imagenet_pytorch/",
                               split='val',
                               transform=self.get_imagenet_transform(224))
                           }
