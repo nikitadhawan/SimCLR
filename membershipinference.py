@@ -132,7 +132,7 @@ dataset2 = RegularDataset(args.data)
 assert args.n_views == 2
 train_dataset = dataset.get_dataset(args.dataset,  args.n_views)  # augmented training set
 train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False,
+        train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 
@@ -141,14 +141,14 @@ indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
 val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
+        val_dataset, batch_size=args.batch_size, shuffle=True, # shuffle to ensure random selection of points
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 test_dataset = dataset.get_test_dataset(args.dataset,
                                                  args.n_views)
 
 test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
+        test_dataset, batch_size=args.batch_size, shuffle=True, # shuffle true to ensure random selection of points
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 test_svhn = dataset2.get_test_dataset("svhn",1)
@@ -377,7 +377,7 @@ with torch.no_grad():
         randomtrain.append(loss.item())
         loss = criterion3(stolen_features_1, stolen_features_2)
         stolentrain.append(loss.item())   # loss for all 3 models
-        if counter >= 2000:
+        if counter >= 10000:
             break
 
 
@@ -404,7 +404,7 @@ with torch.no_grad():
         randomtest.append(loss.item())
         loss = criterion3(stolen_features_1, stolen_features_2)
         stolentest.append(loss.item())
-        if counter >= 2000:
+        if counter >= 10000:
             break
 
 plt.hist(victimtrain, density=True, bins='auto', label="train")
@@ -461,24 +461,5 @@ print("Running t test for stolen model")
 run_ttest(np.array(stolentrain), np.array(stolentest), args)
 print("Running t test for random model")
 run_ttest(np.array(randomtrain), np.array(randomtest), args)
-
-    # tval, pval = ttest(randomtrain, randomtest, alternative="two.sided")
-    # print('Null hypothesis for random: training loss == testing loss', ' pval: ', pval)
-
-    # tval, pval = ttest(victimtrain, victimtest, alternative="two.sided")
-    # print('Null hypothesis for victim: training loss == testing loss', ' pval: ', pval)
-
-    # tval, pval = ttest(stolentrain, stolentest, alternative="two.sided")
-    # print('Null hypothesis for stolen: training loss == testing loss', ' pval: ', pval)
-
-
-    # print(f"r_train: {np.mean(randomtrain)} +- {np.std(randomtrain)}")
-    # print(f"r_test: {np.mean(randomtest)} +- {np.std(randomtest)}")
-
-    # print(f"s_train: {np.mean(stolentrain)} +- {np.std(stolentrain)}")
-    # print(f"s_test: {np.mean(stolentest)} +- {np.std(stolentest)}")
-
-    # print(f"v_train: {np.mean(victimtrain)} +- {np.std(victimtrain)}")
-    # print(f"v_test: {np.mean(victimtest)} +- {np.std(victimtest)}")
 
 
