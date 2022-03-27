@@ -26,7 +26,7 @@ model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
                      and callable(models.__dict__[name]))
 
-parser = argparse.ArgumentParser(description='PyTorch SimCLR')
+parser = argparse.ArgumentParser(description='Self Supervised Membership Inference')
 parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
@@ -106,6 +106,8 @@ parser.add_argument('--similarity', default='cosine', type=str,
                     help='type of function to measure the similarity ', choices=['cosine', 'mse'])
 parser.add_argument('--n-augmentations', default=2, type=int,
                     help='Number of augmentations to generate when computing losses')
+parser.add_argument('--maxlim', default=1000, type=int,
+                    help='Number of samples to check')
 
 args = parser.parse_args()
 print_args(args)
@@ -184,11 +186,13 @@ def info_nce_loss(features, args):
     # Need to put logits and labels on cuda.
 
 criterion = nn.CrossEntropyLoss().to(device)
-criterion2 = nn.CosineSimilarity(dim=1)
+#criterion2 = nn.CosineSimilarity(dim=1)
 if args.similarity == "cosine":
     similarity = nn.CosineSimilarity(dim=1)
+    scale = 1
 elif args.similarity == "mse":
     similarity = nn.MSELoss().to(device)
+    scale = 1 # scale used to get positive values for the loss
 
 if args.dataset == "imagenet":
     if args.victim_model_type == "simsiam":
@@ -245,7 +249,7 @@ elif args.victimhead == "False":
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                args.arch, args.lossvictim,
                                device=device, discard_mlp=True,
-                               watermark=args.watermark, entropy=args.entropy)
+                               watermark=args.watermark)
 else:  # We use this option when computing the loss with the head
     victim_model = ResNetSimCLRNEW(base_model=args.arch,
                                   out_dim=args.out_dim, loss=args.lossvictim,
@@ -353,93 +357,113 @@ with torch.no_grad():
     for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
         images = torch.cat(images, dim=0)
         images = images.to(device)
-        x1 = images[0].unsqueeze(dim=0)
-        x2 = images[1].unsqueeze(dim=0) # first and second augmented views for each image
+        lossvic = 0
+        lossstolen = 0
+        lossrandom = 0
+        # Compute similarity over all nC2 augmentations of an image
+        for i in range(args.n_augmentations-1):
+            for j in range(i, args.n_augmentations):
+                xi = images[i].unsqueeze(dim=0)
+                xj = images[j].unsqueeze(dim=0)  # i and j augmented views for each image
 
-        victim_features_1 = victim_model(x1)
-        stolen_features_1 = stolen_model(x1)
-        random_features2_1 = random_model2(x1)
-        victim_features_2 = victim_model(x2)
-        stolen_features_2 = stolen_model(x2)
-        random_features2_2 = random_model2(x2)   # compute representations of all 3 models on both views
-        if args.victimhead == "True":
-            victim_features_1_h = only_head(victim_features_1)
-            victim_features_2_h = only_head(victim_features_2)
-            stolen_features_1_h = only_head(stolen_features_1)
-            stolen_features_2_h = only_head(stolen_features_2)
-            random_features2_1_h = only_head(random_features2_1)
-            random_features2_2_h = only_head(random_features2_2)     # representations when passed through the head
-            #random_features2 = only_head(random_features2)
-            # loss = -(criterion2(victim_features_1,
-            #                     victim_features_2_h).mean() + criterion2(
-            #     victim_features_2, victim_features_1_h).mean()) * 0.5
-            loss = -criterion2(victim_features_1, victim_features_2)  # for now doing it without the head.
-            victimtrain.append(loss.item())
-            # loss = -(criterion2(random_features2_1,
-            #                     random_features2_2_h).mean() + criterion2(
-            #     random_features2_2, random_features2_1_h).mean()) * 0.5
-            loss = -criterion2(random_features2_1, random_features2_2)
-            randomtrain.append(loss.item())
-            #loss = -(criterion2(stolen_features_1, stolen_features_2_h).mean() + criterion2(stolen_features_2, stolen_features_1_h).mean()) * 0.5
-            loss = -criterion2(stolen_features_1, stolen_features_2)
-            stolentrain.append(loss.item())    # compute symmetrized loss between two views of an image
-        else:
-            loss = similarity(victim_features_1, victim_features_2)
-            victimtrain.append(loss.item())
-            loss = similarity(random_features2_1, random_features2_2)
-            randomtrain.append(loss.item())
-            loss = similarity(stolen_features_1, stolen_features_2)
-            stolentrain.append(loss.item())   # loss for all 3 models
-        if counter >= 10000:
+                victim_features_i = victim_model(xi)
+                stolen_features_i = stolen_model(xi)
+                random_features2_i = random_model2(xi)
+                victim_features_j = victim_model(xj)
+                stolen_features_j = stolen_model(xj)
+                random_features2_j = random_model2(xj)   # compute representations of all 3 models on both views
+                if args.victimhead == "True":
+                    raise NotImplementedError # currently do not support using the head for this pairwise loss computation
+                    # victim_features_i_h = only_head(victim_features_i)
+                    # victim_features_j_h = only_head(victim_features_j)
+                    # stolen_features_i_h = only_head(stolen_features_i)
+                    # stolen_features_j_h = only_head(stolen_features_j)
+                    # random_features2_i_h = only_head(random_features2_i)
+                    # random_features2_j_h = only_head(random_features2_j)     # representations when passed through the head
+                    # #random_features2 = only_head(random_features2)
+                    # # loss = -(criterion2(victim_features_i,
+                    # #                     victim_features_j_h).mean() + criterion2(
+                    # #     victim_features_j, victim_features_i_h).mean()) * 0.5
+                    # loss = -criterion2(victim_features_i, victim_features_j)  # for now doing it without the head.
+                    # victimtrain.append(loss.item())
+                    # # loss = -(criterion2(random_features2_i,
+                    # #                     random_features2_j_h).mean() + criterion2(
+                    # #     random_features2_j, random_features2_i_h).mean()) * 0.5
+                    # loss = -criterion2(random_features2_i, random_features2_j)
+                    # randomtrain.append(loss.item())
+                    # #loss = -(criterion2(stolen_features_i, stolen_features_j_h).mean() + criterion2(stolen_features_j, stolen_features_i_h).mean()) * 0.5
+                    # loss = -criterion2(stolen_features_i, stolen_features_j)
+                    # stolentrain.append(loss.item())    # compute symmetrized loss between two views of an image
+                else:
+                    loss = similarity(victim_features_i, victim_features_j)
+                    lossvic += loss.item()
+                    loss = similarity(random_features2_i, random_features2_j)
+                    lossrandom += loss.item()
+                    loss = similarity(stolen_features_i, stolen_features_j)
+                    lossstolen += loss.item()
+
+        victimtrain.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        randomtrain.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        stolentrain.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))   # loss for all 3 models
+        if counter > args.maxlim:
             break
 
 
     for counter, (images, truelabels) in enumerate(tqdm(test_loader)):
         images = torch.cat(images, dim=0)
         images = images.to(device)
+        lossvic = 0
+        lossstolen = 0
+        lossrandom = 0
+        # Compute similarity over all nC2 augmentations of an image
+        for i in range(args.n_augmentations - 1):
+            for j in range(i, args.n_augmentations):
+                xi = images[i].unsqueeze(dim=0)
+                xj = images[j].unsqueeze(dim=0)  # first and second augmented views for each image
 
-        x1 = images[0].unsqueeze(dim=0)
-        x2 = images[1].unsqueeze(dim=0)  # first and second augmented views for each image
-
-        victim_features_1 = victim_model(x1)
-        stolen_features_1 = stolen_model(x1)
-        random_features2_1 = random_model2(x1)
-        victim_features_2 = victim_model(x2)
-        stolen_features_2 = stolen_model(x2)
-        random_features2_2 = random_model2(x2)  # compute representations of all 3 models on both views
-        if args.victimhead == "True":
-            victim_features_1_h = only_head(victim_features_1)
-            victim_features_2_h = only_head(victim_features_2)
-            stolen_features_1_h = only_head(stolen_features_1)
-            stolen_features_2_h = only_head(stolen_features_2)
-            random_features2_1_h = only_head(random_features2_1)
-            random_features2_2_h = only_head(
-                random_features2_2)  # representations when passed through the head
-            # random_features2 = only_head(random_features2)
-            # loss = -(criterion2(victim_features_1,
-            #                     victim_features_2_h).mean() + criterion2(
-            #     victim_features_2, victim_features_1_h).mean()) * 0.5
-            loss = -criterion2(victim_features_1, victim_features_2)
-            victimtest.append(loss.item())
-            # loss = -(criterion2(random_features2_1,
-            #                     random_features2_2_h).mean() + criterion2(
-            #     random_features2_2, random_features2_1_h).mean()) * 0.5
-            loss = -criterion2(random_features2_1,random_features2_2)
-            randomtest.append(loss.item())
-            # loss = -(criterion2(stolen_features_1,
-            #                     stolen_features_2_h).mean() + criterion2(
-            #     stolen_features_2, stolen_features_1_h).mean()) * 0.5
-            loss = -criterion2(stolen_features_1, stolen_features_2)
-            stolentest.append(
-                loss.item())  # compute symmetrized loss between two views of an image
-        else:
-            loss = similarity(victim_features_1, victim_features_2)
-            victimtest.append(loss.item())
-            loss = similarity(random_features2_1, random_features2_2)
-            randomtest.append(loss.item())
-            loss = similarity(stolen_features_1, stolen_features_2)
-            stolentest.append(loss.item())
-        if counter >= 10000:
+                victim_features_i = victim_model(xi)
+                stolen_features_i = stolen_model(xi)
+                random_features2_i = random_model2(xi)
+                victim_features_j = victim_model(xj)
+                stolen_features_j = stolen_model(xj)
+                random_features2_j = random_model2(xj)  # compute representations of all 3 models on both views
+                if args.victimhead == "True":
+                    raise NotImplementedError
+                    # victim_features_i_h = only_head(victim_features_i)
+                    # victim_features_j_h = only_head(victim_features_j)
+                    # stolen_features_i_h = only_head(stolen_features_i)
+                    # stolen_features_j_h = only_head(stolen_features_j)
+                    # random_features2_i_h = only_head(random_features2_i)
+                    # random_features2_j_h = only_head(
+                    #     random_features2_j)  # representations when passed through the head
+                    # # random_features2 = only_head(random_features2)
+                    # # loss = -(criterion2(victim_features_i,
+                    # #                     victim_features_j_h).mean() + criterion2(
+                    # #     victim_features_j, victim_features_i_h).mean()) * 0.5
+                    # loss = -criterion2(victim_features_i, victim_features_j)
+                    # victimtest.append(loss.item())
+                    # # loss = -(criterion2(random_features2_i,
+                    # #                     random_features2_j_h).mean() + criterion2(
+                    # #     random_features2_j, random_features2_i_h).mean()) * 0.5
+                    # loss = -criterion2(random_features2_i,random_features2_j)
+                    # randomtest.append(loss.item())
+                    # # loss = -(criterion2(stolen_features_i,
+                    # #                     stolen_features_j_h).mean() + criterion2(
+                    # #     stolen_features_j, stolen_features_i_h).mean()) * 0.5
+                    # loss = -criterion2(stolen_features_i, stolen_features_j)
+                    # stolentest.append(
+                    #     loss.item())  # compute symmetrized loss between two views of an image
+                else:
+                    loss = similarity(victim_features_i, victim_features_j)
+                    lossvic += loss.item()
+                    loss = similarity(random_features2_i, random_features2_j)
+                    lossrandom += loss.item()
+                    loss = similarity(stolen_features_i, stolen_features_j)
+                    lossstolen += loss.item()
+            victimtest.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+            randomtest.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+            stolentest.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        if counter > args.maxlim:
             break
 
 plt.hist(victimtrain, density=True, bins='auto', label="train")
