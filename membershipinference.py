@@ -27,7 +27,7 @@ model_names = sorted(name for name in models.__dict__
                      and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
-parser.add_argument('-data', metavar='DIR', default='/ssd003/home/akaleem/data',
+parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name(for training victim model)', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
@@ -44,18 +44,16 @@ parser.add_argument('--archstolen', default='resnet34',
                          ' | '.join(model_names) +
                          ' (default: resnet34)')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
-                    help='number of data loading workers (default: 32)')
+                    help='number of data loading workers (default: 2)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=1, type=int,   # use 1 when using MSE loss
+parser.add_argument('-b', '--batch-size', default=1, type=int,   # using 1 for per sample comparison
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
-                    metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
@@ -76,8 +74,6 @@ parser.add_argument('--temperaturesn', default=100, type=float,
                     help='temperature for soft nearest neighbors loss')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--n-views', default=2, type=int, metavar='N',  # use 2 to use multiple augmentations.
-                    help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--logdir', default='test', type=str,
                     help='Log directory to save output to.')
@@ -99,20 +95,17 @@ parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('--watermark', default='False', type=str,
                     help='Evaluate with watermark model from victim', choices=['True', 'False'])
-parser.add_argument('--entropy', default='False', type=str,
-                    help='Use entropy victim model', choices=['True', 'False'])
 parser.add_argument('--victim_model_type', type=str,
                     # default='supervised',
                     # default='encoder',
                     default='simsiam',
                     choices=['simclr','simsiam','encoder','supervised'],
-                    help='The type of the model from supervised or '
+                    help='The type of victim model from supervised or '
                          'self-supervised learning.')
-parser.add_argument('--dist_type', type=str,
-                    # default='L2',
-                    default='InfoNCE',
-                    help='The distance type (metric) use to compare the '
-                         'difference between the representations.')
+parser.add_argument('--similarity', default='cosine', type=str,
+                    help='type of function to measure the similarity ', choices=['cosine', 'mse'])
+parser.add_argument('--n-augmentations', default=2, type=int,
+                    help='Number of augmentations to generate when computing losses')
 
 args = parser.parse_args()
 print_args(args)
@@ -129,14 +122,13 @@ if args.dataset == "imagenet":  # manually set parameters in the case of imagene
     args.losstype = "infonce"
 dataset = ContrastiveLearningDataset(args.data)
 dataset2 = RegularDataset(args.data)
-assert args.n_views == 2
-train_dataset = dataset.get_dataset(args.dataset,  args.n_views)  # augmented training set
+train_dataset = dataset.get_dataset(args.dataset,  args.n_augmentations)  # augmented training set
 train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 
-val_dataset = dataset.get_dataset(args.dataset, args.n_views)
+val_dataset = dataset.get_dataset(args.dataset, args.n_augmentations)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
@@ -145,7 +137,7 @@ val_loader = torch.utils.data.DataLoader(
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 test_dataset = dataset.get_test_dataset(args.dataset,
-                                                 args.n_views)
+                                                 args.n_augmentations)
 
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=True, # shuffle true to ensure random selection of points
@@ -193,7 +185,10 @@ def info_nce_loss(features, args):
 
 criterion = nn.CrossEntropyLoss().to(device)
 criterion2 = nn.CosineSimilarity(dim=1)
-criterion3 = nn.MSELoss().to(device) # MSE
+if args.similarity == "cosine":
+    similarity = nn.CosineSimilarity(dim=1)
+elif args.similarity == "mse":
+    similarity = nn.MSELoss().to(device)
 
 if args.dataset == "imagenet":
     if args.victim_model_type == "simsiam":
@@ -233,7 +228,7 @@ if args.dataset == "imagenet":
 
             victim_model= resnet50rep().to(device)
             checkpoint = torch.load(
-                    f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location="cpu")
+                    f"/ssd003/home/{os.getenv('USER')}/SimCLR/models/resnet50-1x.pth", map_location="cpu")
             state_dict = checkpoint['state_dict']
             new_state_dict = state_dict.copy()
             # for k in state_dict.keys():
@@ -254,7 +249,7 @@ elif args.victimhead == "False":
 else:  # We use this option when computing the loss with the head
     victim_model = ResNetSimCLRNEW(base_model=args.arch,
                                   out_dim=args.out_dim, loss=args.lossvictim,
-                                  include_mlp=True).to(device)
+                                  include_mlp=False).to(device)
     victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                args.arch, args.lossvictim,
                                device=device)
@@ -368,15 +363,33 @@ with torch.no_grad():
         stolen_features_2 = stolen_model(x2)
         random_features2_2 = random_model2(x2)   # compute representations of all 3 models on both views
         if args.victimhead == "True":
-            stolen_features_1 = only_head(stolen_features_1)
-            stolen_features_2 = only_head(stolen_features_2)
+            victim_features_1_h = only_head(victim_features_1)
+            victim_features_2_h = only_head(victim_features_2)
+            stolen_features_1_h = only_head(stolen_features_1)
+            stolen_features_2_h = only_head(stolen_features_2)
+            random_features2_1_h = only_head(random_features2_1)
+            random_features2_2_h = only_head(random_features2_2)     # representations when passed through the head
             #random_features2 = only_head(random_features2)
-        loss = criterion3(victim_features_1, victim_features_2)
-        victimtrain.append(loss.item())
-        loss = criterion3(random_features2_1, random_features2_2)
-        randomtrain.append(loss.item())
-        loss = criterion3(stolen_features_1, stolen_features_2)
-        stolentrain.append(loss.item())   # loss for all 3 models
+            # loss = -(criterion2(victim_features_1,
+            #                     victim_features_2_h).mean() + criterion2(
+            #     victim_features_2, victim_features_1_h).mean()) * 0.5
+            loss = -criterion2(victim_features_1, victim_features_2)  # for now doing it without the head.
+            victimtrain.append(loss.item())
+            # loss = -(criterion2(random_features2_1,
+            #                     random_features2_2_h).mean() + criterion2(
+            #     random_features2_2, random_features2_1_h).mean()) * 0.5
+            loss = -criterion2(random_features2_1, random_features2_2)
+            randomtrain.append(loss.item())
+            #loss = -(criterion2(stolen_features_1, stolen_features_2_h).mean() + criterion2(stolen_features_2, stolen_features_1_h).mean()) * 0.5
+            loss = -criterion2(stolen_features_1, stolen_features_2)
+            stolentrain.append(loss.item())    # compute symmetrized loss between two views of an image
+        else:
+            loss = similarity(victim_features_1, victim_features_2)
+            victimtrain.append(loss.item())
+            loss = similarity(random_features2_1, random_features2_2)
+            randomtrain.append(loss.item())
+            loss = similarity(stolen_features_1, stolen_features_2)
+            stolentrain.append(loss.item())   # loss for all 3 models
         if counter >= 10000:
             break
 
@@ -395,15 +408,37 @@ with torch.no_grad():
         stolen_features_2 = stolen_model(x2)
         random_features2_2 = random_model2(x2)  # compute representations of all 3 models on both views
         if args.victimhead == "True":
-            stolen_features_1 = only_head(stolen_features_1)
-            stolen_features_2 = only_head(stolen_features_2)
-            #random_features2 = only_head(random_features2)
-        loss = criterion3(victim_features_1, victim_features_2)
-        victimtest.append(loss.item())
-        loss = criterion3(random_features2_1, random_features2_2)
-        randomtest.append(loss.item())
-        loss = criterion3(stolen_features_1, stolen_features_2)
-        stolentest.append(loss.item())
+            victim_features_1_h = only_head(victim_features_1)
+            victim_features_2_h = only_head(victim_features_2)
+            stolen_features_1_h = only_head(stolen_features_1)
+            stolen_features_2_h = only_head(stolen_features_2)
+            random_features2_1_h = only_head(random_features2_1)
+            random_features2_2_h = only_head(
+                random_features2_2)  # representations when passed through the head
+            # random_features2 = only_head(random_features2)
+            # loss = -(criterion2(victim_features_1,
+            #                     victim_features_2_h).mean() + criterion2(
+            #     victim_features_2, victim_features_1_h).mean()) * 0.5
+            loss = -criterion2(victim_features_1, victim_features_2)
+            victimtest.append(loss.item())
+            # loss = -(criterion2(random_features2_1,
+            #                     random_features2_2_h).mean() + criterion2(
+            #     random_features2_2, random_features2_1_h).mean()) * 0.5
+            loss = -criterion2(random_features2_1,random_features2_2)
+            randomtest.append(loss.item())
+            # loss = -(criterion2(stolen_features_1,
+            #                     stolen_features_2_h).mean() + criterion2(
+            #     stolen_features_2, stolen_features_1_h).mean()) * 0.5
+            loss = -criterion2(stolen_features_1, stolen_features_2)
+            stolentest.append(
+                loss.item())  # compute symmetrized loss between two views of an image
+        else:
+            loss = similarity(victim_features_1, victim_features_2)
+            victimtest.append(loss.item())
+            loss = similarity(random_features2_1, random_features2_2)
+            randomtest.append(loss.item())
+            loss = similarity(stolen_features_1, stolen_features_2)
+            stolentest.append(loss.item())
         if counter >= 10000:
             break
 
