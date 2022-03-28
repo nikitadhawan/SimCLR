@@ -460,9 +460,9 @@ with torch.no_grad():
                     lossrandom += loss.item()
                     loss = similarity(stolen_features_i, stolen_features_j)
                     lossstolen += loss.item()
-            victimtest.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
-            randomtest.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
-            stolentest.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        victimtest.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        randomtest.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
+        stolentest.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
         if counter > args.maxlim:
             break
 
