@@ -2,6 +2,8 @@
 # Currently trying LOSS based approach where we look at the loss of individual data samples and then plot a histogram
 
 import argparse
+
+import copy
 import torch
 torch.manual_seed(0)
 import torch.nn as nn
@@ -122,15 +124,18 @@ if args.dataset == "imagenet":  # manually set parameters in the case of imagene
     args.datasetsteal = "imagenet"
     args.num_queries = 100000
     args.losstype = "infonce"
+    size = 224
+else:
+    size = 32
 dataset = ContrastiveLearningDataset(args.data)
 dataset2 = RegularDataset(args.data)
-train_dataset = dataset.get_dataset(args.dataset,  args.n_augmentations)  # augmented training set
+train_dataset = dataset.get_dataset(args.dataset,  1)  # unaugmented training set
 train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 
-val_dataset = dataset.get_dataset(args.dataset, args.n_augmentations)
+val_dataset = dataset.get_dataset(args.dataset, 1)
 indxs = list(range(len(train_dataset) - 10000, len(train_dataset)))
 val_dataset = torch.utils.data.Subset(val_dataset,
                                            indxs)
@@ -139,7 +144,7 @@ val_loader = torch.utils.data.DataLoader(
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 test_dataset = dataset.get_test_dataset(args.dataset,
-                                                 args.n_augmentations)
+                                                 1)
 
 test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=True, # shuffle true to ensure random selection of points
@@ -152,14 +157,16 @@ test_loader_svhn = torch.utils.data.DataLoader(
 
 # Transforms from contrastive_learning_dataset.py
 color_jitter = transforms.ColorJitter(0.8, 0.8 , 0.8, 0.2)
+to_tensor = transforms.ToTensor()
+to_pil = transforms.ToPILImage()
 data_transforms = transforms.Compose(
-    [transforms.ToPILImage(),
-     transforms.RandomResizedCrop(size=32),
-     transforms.RandomHorizontalFlip(),
-     transforms.RandomApply([color_jitter], p=0.8),
-     transforms.RandomGrayscale(p=0.2),
-     GaussianBlur(kernel_size=int(0.1 * 32)),
-     transforms.ToTensor()])
+    [
+        transforms.RandomResizedCrop(size=size),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomApply([color_jitter], p=0.8),
+        transforms.RandomGrayscale(p=0.2),
+        GaussianBlur(kernel_size=int(0.1 * size)),
+     ])
 
 
 def info_nce_loss(features, args):
@@ -189,7 +196,7 @@ criterion = nn.CrossEntropyLoss().to(device)
 #criterion2 = nn.CosineSimilarity(dim=1)
 if args.similarity == "cosine":
     similarity = nn.CosineSimilarity(dim=1)
-    scale = 1
+    scale = -1 # so that a lower loss corresponds to a lower loss normally
 elif args.similarity == "mse":
     similarity = nn.MSELoss().to(device)
     scale = 1 # scale used to get positive values for the loss
@@ -356,7 +363,15 @@ victimtest = []
 with torch.no_grad():
     for counter, (images, truelabels) in enumerate(tqdm(train_loader)):
         images = torch.cat(images, dim=0)
-        images = images.to(device)
+        #images = images.to(device)
+        augment_images = []
+        for i in range(args.n_augmentations):
+            aug_image = to_pil(images[0])
+            aug_image = data_transforms(aug_image)
+            aug_image = to_tensor(aug_image)
+            augment_images.append(aug_image.to(device))
+        images = copy.deepcopy(augment_images)
+        del augment_images
         lossvic = 0
         lossstolen = 0
         lossrandom = 0
@@ -405,13 +420,21 @@ with torch.no_grad():
         victimtrain.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
         randomtrain.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
         stolentrain.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))   # loss for all 3 models
-        if counter > args.maxlim:
+        if counter >= args.maxlim:
             break
 
 
     for counter, (images, truelabels) in enumerate(tqdm(test_loader)):
         images = torch.cat(images, dim=0)
-        images = images.to(device)
+        #images = images.to(device)
+        augment_images = []
+        for i in range(args.n_augmentations):
+            aug_image = to_pil(images[0])
+            aug_image = data_transforms(aug_image)
+            aug_image = to_tensor(aug_image)
+            augment_images.append(aug_image.to(device))
+        images = copy.deepcopy(augment_images)
+        del augment_images
         lossvic = 0
         lossstolen = 0
         lossrandom = 0
@@ -463,7 +486,7 @@ with torch.no_grad():
         victimtest.append(lossvic * scale  * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
         randomtest.append(lossrandom * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
         stolentest.append(lossstolen * scale * 2 / (args.n_augmentations * (args.n_augmentations - 1)))
-        if counter > args.maxlim:
+        if counter >= args.maxlim:
             break
 
 plt.hist(victimtrain, density=True, bins='auto', label="train")
