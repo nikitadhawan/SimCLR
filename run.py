@@ -91,13 +91,6 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                  weight_decay=args.weight_decay)
 
-    if args.watermark == "True":
-        watermark_dataset = WatermarkDataset(args.data).get_dataset(
-            args.dataset, args.n_views)
-        watermark_loader = torch.utils.data.DataLoader(
-            watermark_dataset, batch_size=args.batch_size, shuffle=True,
-            num_workers=args.workers, pin_memory=True, drop_last=True)
-        watermark_mlp = WatermarkMLP(512, 2)
 
     if args.losstype == "supcon":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,

@@ -23,8 +23,6 @@ class SimCLR(object):
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
-        if watermark_mlp is not None:
-            self.watermark_mlp = watermark_mlp.to(self.args.device)
         if stealing:
             if self.args.defence == "True":
                 self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
@@ -161,12 +159,11 @@ class SimCLR(object):
 
         logging.info("Training has finished.")
         # save model checkpoints
-        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}WATERMARK.pth.tar'
+        checkpoint_name = f'{self.args.dataset}_checkpoint_{self.args.epochs}_{self.args.losstype}.pth.tar'
         save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
             'state_dict': self.model.state_dict(),
-            'watermark_state_dict': self.watermark_mlp.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }, is_best=False,
             filename=os.path.join(self.log_dir2, checkpoint_name))
