@@ -22,12 +22,6 @@ class ContrastiveLearningDataset:
                                               transforms.ToTensor()])
         return data_transforms
 
-    @staticmethod
-    def get_imagenet_transform(size, s=1):
-        data_transforms = transforms.Compose([
-            transforms.RandomResizedCrop(size),
-            transforms.ToTensor()])
-        return data_transforms
 
 
     def get_dataset(self, name, n_views):
@@ -50,13 +44,7 @@ class ContrastiveLearningDataset:
                                                                   32),
                                                               n_views),
                                                           download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='train',
-                              transform=ContrastiveLearningViewGenerator(
-                                  self.get_simclr_pipeline_transform(
-                                      32),
-                                  n_views))
+
                           }
 
         try:
@@ -85,13 +73,6 @@ class ContrastiveLearningDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='val',
-                              transform=ContrastiveLearningViewGenerator(
-                                  self.get_simclr_pipeline_transform(
-                                      32),
-                                  n_views))
                           }
 
 
@@ -110,13 +91,6 @@ class RegularDataset:
     @staticmethod
     def get_simclr_pipeline_transform(size, s=1):
         data_transforms = transforms.Compose([transforms.ToTensor()])
-        return data_transforms
-
-    @staticmethod
-    def get_imagenet_transform(size, s=1):
-        data_transforms = transforms.Compose([
-        transforms.RandomResizedCrop(size),
-        transforms.ToTensor()])
         return data_transforms
 
     def get_dataset(self, name, n_views):
@@ -138,13 +112,7 @@ class RegularDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='train',
-                              transform=ContrastiveLearningViewGenerator(
-                                  self.get_imagenet_transform(
-                                      32),
-                                  n_views))
+
                           }
 
         try:
@@ -189,111 +157,39 @@ class RegularDataset:
         else:
             return dataset_fn()
 
-
-class WatermarkDataset:
-    def __init__(self, root_folder):
-        self.root_folder = root_folder
-
-    @staticmethod
-    def get_transform():
-        data_transform1 = transforms.Compose([transforms.RandomRotation(degrees=(0, 180)),
-                                              transforms.ToTensor()])
-        data_transform2 = transforms.Compose([transforms.RandomRotation(degrees=(180, 360)),
-                                              transforms.ToTensor()])
-        return [data_transform1, data_transform2]
-
-        # data_transform1 = transforms.Compose(
-        #     [transforms.RandomRotation(degrees=(0, 90)),
-        #      transforms.ToTensor()])
-        # data_transform2 = transforms.Compose(
-        #     [transforms.RandomRotation(degrees=(90, 180)),
-        #      transforms.ToTensor()])
-        # data_transform3 = transforms.Compose(
-        #     [transforms.RandomRotation(degrees=(180, 270)),
-        #      transforms.ToTensor()])
-        # data_transform4 = transforms.Compose(
-        #     [transforms.RandomRotation(degrees=(270, 360)),
-        #      transforms.ToTensor()])
-        # return [data_transform1, data_transform2, data_transform3, data_transform4]
-
-    @staticmethod
-    def get_imagenet_transform(size, s=1):
-        data_transform1 = transforms.Compose([
-            transforms.RandomResizedCrop(size),
-            transforms.RandomRotation(degrees=(0, 180)),
-            transforms.ToTensor()])
-        data_transform2 = transforms.Compose([
-            transforms.RandomResizedCrop(size),
-            transforms.RandomRotation(degrees=(180, 360)),
-             transforms.ToTensor()])
-        return [data_transform1, data_transform2]
-
-    def get_dataset(self, name, n_views):
-        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
-                                                              transform=WatermarkViewGenerator(
-                                                                  self.get_transform(),
+if __name__ == "__main__":
+    import getpass
+    user = getpass.getuser()
+    from torch.utils.data import ConcatDataset, DataLoader
+    import numpy as np
+    # Important: color jitter does not work with 1 channel images
+    def get_simclr_pipeline_transform(size, s=1):
+        data_transforms = transforms.Compose([transforms.ToTensor()])
+        return data_transforms
+    n_views = 2
+    # testing combined dataset with fmnist and mnist
+    fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/', train=True,
+                                                              transform=ContrastiveLearningViewGenerator(
+                                                                  get_simclr_pipeline_transform(28),
                                                                   n_views),
-                                                              download=True),
-
-                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled',
-                                                          transform=WatermarkViewGenerator(
-                                                              self.get_transform(),
-                                                              n_views),
-                                                          download=True),
-                          'svhn': lambda: datasets.SVHN(
-                              self.root_folder + "/SVHN",
-                              split='train',
-                              transform=WatermarkViewGenerator(
-                                  self.get_transform(),
-                                  n_views),
-                              download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='train',
-                              transform=WatermarkViewGenerator(
-                                  self.get_imagenet_transform(
-                                      32),
-                                  n_views))
-                          }
-
-        try:
-            dataset_fn = valid_datasets[name]
-        except KeyError:
-            raise InvalidDatasetSelection()
-        else:
-            return dataset_fn()
-
-    def get_test_dataset(self, name, n_views):
-        valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=False,
-                                                              transform=WatermarkViewGenerator(
-                                                                  self.get_transform(),
+                                                              download=False)
+    #print(fmnist.targets)  # from 0 to 9.
+    print("length fmnist", len(fmnist))
+    mnist = datasets.MNIST(f'/ssd003/home/{user}/data/', train=True,
+                                                              transform=ContrastiveLearningViewGenerator(
+                                                                  get_simclr_pipeline_transform(28),
                                                                   n_views),
-                                                              download=False),
+                                                              download=False)
+    #print(mnist.targets) # from 0 to 9
+    idx = (mnist.targets == 2) | (mnist.targets == 3)
+    mnist.targets = mnist.targets[idx] # only select 2's and 3's from mnist
+    mnist.data = mnist.data[idx]
+    mnist.targets = mnist.targets + 8 # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+    print("length mnist", len(mnist))
 
-                          'stl10': lambda: datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
-                                                          transform=WatermarkViewGenerator(
-                                                              self.get_transform(),
-                                                              n_views),
-                                                          download=False),
-                          'svhn': lambda: datasets.SVHN(
-                              self.root_folder + "/SVHN",
-                              split='test',
-                              transform=WatermarkViewGenerator(
-                                  self.get_transform(),
-                                  n_views),
-                              download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='val',
-                              transform=WatermarkViewGenerator(
-                                  self.get_imagenet_transform(
-                                      32),
-                                  n_views))
-                          }
-
-        try:
-            dataset_fn = valid_datasets[name]
-        except KeyError:
-            raise InvalidDatasetSelection()
-        else:
-            return dataset_fn()
+    combined = ConcatDataset([fmnist,mnist])
+    print("length combined", len(combined))
+    combined_loader = DataLoader(
+        combined, batch_size=64, shuffle=True,
+        num_workers=2, pin_memory=True, drop_last=True)
+    print(next(iter(combined_loader)))
