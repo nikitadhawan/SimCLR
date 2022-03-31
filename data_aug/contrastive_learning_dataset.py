@@ -3,8 +3,10 @@ from data_aug.gaussian_blur import GaussianBlur
 from torchvision import transforms, datasets
 from data_aug.view_generator import ContrastiveLearningViewGenerator, WatermarkViewGenerator
 from exceptions.exceptions import InvalidDatasetSelection
+from torch.utils.data import ConcatDataset
 import os
-
+import getpass
+user = getpass.getuser()
 
 class ContrastiveLearningDataset:
     def __init__(self, root_folder):
@@ -21,6 +23,52 @@ class ContrastiveLearningDataset:
                                               GaussianBlur(kernel_size=int(0.1 * size)),
                                               transforms.ToTensor()])
         return data_transforms
+
+    @staticmethod
+    def get_simclr_pipeline_transform_grayscale(size, s=1):
+        """Return a set of data augmentation transformations as described in the SimCLR paper for 1 channel datasets e.g. mnist"""
+        data_transforms = transforms.Compose(
+            [transforms.RandomResizedCrop(size=size),
+             transforms.RandomHorizontalFlip(),
+             transforms.ToTensor()])
+        return data_transforms
+
+
+    def get_mixed_train(self,n_views):
+        fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/', train=True,
+                                       transform=ContrastiveLearningViewGenerator(
+                                           self.get_simclr_pipeline_transform_grayscale(28),
+                                           n_views),
+                                       download=False)
+        mnist = datasets.MNIST(f'/ssd003/home/{user}/data/', train=True,
+                               transform=ContrastiveLearningViewGenerator(
+                                   self.get_simclr_pipeline_transform_grayscale(28),
+                                   n_views),
+                               download=False)
+        idx = (mnist.targets == 2) | (mnist.targets == 3)
+        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        mnist.data = mnist.data[idx]
+        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        combined = ConcatDataset([fmnist, mnist])
+        return combined
+
+    def get_mixed_test(self,n_views):
+        fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/', train=False,
+                                       transform=ContrastiveLearningViewGenerator(
+                                           get_simclr_pipeline_transform_grayscale(28),
+                                           n_views),
+                                       download=False)
+        mnist = datasets.MNIST(f'/ssd003/home/{user}/data/', train=False,
+                               transform=ContrastiveLearningViewGenerator(
+                                   get_simclr_pipeline_transform_grayscale(28),
+                                   n_views),
+                               download=False)
+        idx = (mnist.targets == 2) | (mnist.targets == 3)
+        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        mnist.data = mnist.data[idx]
+        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        combined = ConcatDataset([fmnist, mnist])
+        return combined
 
 
 
@@ -44,6 +92,7 @@ class ContrastiveLearningDataset:
                                                                   32),
                                                               n_views),
                                                           download=True),
+                          'mixed': lambda: self.get_mixed_train(n_views),
 
                           }
 
@@ -73,6 +122,8 @@ class ContrastiveLearningDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
+
+                          'mixed': lambda: self.get_mixed_test(n_views),
                           }
 
 
@@ -93,6 +144,44 @@ class RegularDataset:
         data_transforms = transforms.Compose([transforms.ToTensor()])
         return data_transforms
 
+
+    def get_mixed_train(self,n_views):
+        fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/', train=True,
+                                       transform=ContrastiveLearningViewGenerator(
+                                           self.get_simclr_pipeline_transform(28),
+                                           n_views),
+                                       download=False)
+        mnist = datasets.MNIST(f'/ssd003/home/{user}/data/', train=True,
+                               transform=ContrastiveLearningViewGenerator(
+                                   self.get_simclr_pipeline_transform(28),
+                                   n_views),
+                               download=False)
+        idx = (mnist.targets == 2) | (mnist.targets == 3)
+        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        mnist.data = mnist.data[idx]
+        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        combined = ConcatDataset([fmnist, mnist])
+        return combined
+
+    def get_mixed_test(self,n_views):
+        fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/',
+                                       train=False,
+                                       transform=ContrastiveLearningViewGenerator(
+                                           self.get_simclr_pipeline_transform(28),
+                                           n_views),
+                                       download=False)
+        mnist = datasets.MNIST(f'/ssd003/home/{user}/data/', train=False,
+                               transform=ContrastiveLearningViewGenerator(
+                                   self.get_simclr_pipeline_transform(28),
+                                   n_views),
+                               download=False)
+        idx = (mnist.targets == 2) | (mnist.targets == 3)
+        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        mnist.data = mnist.data[idx]
+        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        combined = ConcatDataset([fmnist, mnist])
+        return combined
+
     def get_dataset(self, name, n_views):
         valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True, 
                                                               transform=ContrastiveLearningViewGenerator(
@@ -112,6 +201,7 @@ class RegularDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
+                          'mixed': lambda: self.get_mixed_train(n_views),
 
                           }
 
@@ -141,13 +231,7 @@ class RegularDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
-                          'imagenet': lambda: datasets.ImageNet(
-                              root="/scratch/ssd002/datasets/imagenet256/",
-                              split='val',
-                              transform=ContrastiveLearningViewGenerator(
-                                  self.get_imagenet_transform(
-                                      32),
-                                  n_views))
+                          'mixed': lambda: self.get_mixed_test(n_views),
                           }
 
         try:
@@ -164,7 +248,10 @@ if __name__ == "__main__":
     import numpy as np
     # Important: color jitter does not work with 1 channel images
     def get_simclr_pipeline_transform(size, s=1):
-        data_transforms = transforms.Compose([transforms.ToTensor()])
+        data_transforms = transforms.Compose([
+            transforms.RandomResizedCrop(size=size),
+             transforms.RandomHorizontalFlip(),
+             transforms.ToTensor()])
         return data_transforms
     n_views = 2
     # testing combined dataset with fmnist and mnist

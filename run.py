@@ -2,8 +2,7 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, WatermarkDataset
-from models.resnet_simclr import WatermarkMLP
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from models.resnet import ResNetSimCLR # From other file
 from models.convnet import ConvNetSimCLR  # simple convnet
 from models.resnet_big import SupConResNet
@@ -55,8 +54,6 @@ parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use')
 parser.add_argument('--clear', default='False', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
-parser.add_argument('--watermark', default='False', type=str,
-                    help='Use watermarking when training the model', choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
                     help='Additional softmax layer when training the model', choices=['True', 'False'])
 
@@ -102,16 +99,10 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        if args.watermark == "True":
-            simclr = SimCLR(model=model, optimizer=optimizer,
-                            scheduler=scheduler,
-                            args=args, loss=args.losstype, watermark_mlp=watermark_mlp)
-            simclr.train(train_loader, watermark_loader)
-        else:
-            simclr = SimCLR(model=model, optimizer=optimizer,
-                            scheduler=scheduler,
-                            args=args, loss=args.losstype)
-            simclr.train(train_loader)
+        simclr = SimCLR(model=model, optimizer=optimizer,
+                        scheduler=scheduler,
+                        args=args, loss=args.losstype)
+        simclr.train(train_loader)
 
 
 if __name__ == "__main__":
