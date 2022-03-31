@@ -147,7 +147,6 @@ def ResNet101():
 def ResNet152():
     return ResNet(Bottleneck, [3, 8, 36, 3])
 
-
 class ResNetSimCLR(nn.Module):
 
     def __init__(self, base_model, out_dim, loss=None, include_mlp = True, entropy=False):

@@ -5,24 +5,20 @@ from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, WatermarkDataset
 from models.resnet_simclr import WatermarkMLP
 from models.resnet import ResNetSimCLR # From other file
+from models.convnet import ConvNetSimCLR  # simple convnet
 from models.resnet_big import SupConResNet
 from simclr import SimCLR
 import os
 
-model_names = sorted(name for name in models.__dict__
-                     if name.islower() and not name.startswith("__")
-                     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
-parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
-                    choices=model_names,
-                    help='model architecture: ' +
-                         ' | '.join(model_names) +
-                         ' (default: resnet50)')
+parser.add_argument('--dataset', default='mixed',
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn','fmnist', 'mnist', 'mixed'])
+parser.add_argument('-a', '--arch', metavar='ARCH', default='convnet',
+                    choices=["resnet34", "resnet50", "convnet"],
+                    help='model architecture: ')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
@@ -90,7 +86,7 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, entropy=args.entropy)
+    model = ConvNetSimCLR(base_model=args.arch, out_dim=args.out_dim, entropy=args.entropy)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                  weight_decay=args.weight_decay)
