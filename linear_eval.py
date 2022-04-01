@@ -9,11 +9,13 @@ import argparse
 from torch.utils.data import DataLoader
 #from models.resnet_simclr import ResNetSimCLR
 from models.resnet import ResNetSimCLR, ResNet18, ResNet34 , ResNet50 # from other file
+from models.convnet import ConvNet, ConvNetSimCLR
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 
+# TODO for testing: adjust stealing, add EMNIST, MNIST datasets for linear eval since only they will work with Convnet.
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
@@ -21,14 +23,14 @@ print("Using device:", device)
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
-parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('--dataset-test', default='cifar10',
-                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
+parser.add_argument('--dataset', default='mixed',
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
+parser.add_argument('--dataset-test', default='emnist',
+                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn', 'emnist', 'mnist'])
 parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
-        choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
+parser.add_argument('-a', '--arch', metavar='ARCH', default='convnet',
+        choices=['resnet18', 'resnet34', 'resnet50', 'convnet'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=50000,type=int,
                      help='Number of labeled examples to train on')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
@@ -39,7 +41,7 @@ parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--lr', default=1e-4, type=float, # maybe try other lrs
                     help='learning rate to train the model with.')
-parser.add_argument('--modeltype', default='stolen', type=str,
+parser.add_argument('--modeltype', default='victim', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
 parser.add_argument('--save', default='False', type=str,
                     help='Save final model', choices=['True', 'False'])
@@ -60,14 +62,10 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--watermark', default='False', type=str,
-                    help='Watermark used when training the model', choices=['True', 'False'])
-parser.add_argument('--entropy', default='False', type=str,
-                    help='Additional softmax layer when training the model', choices=['True', 'False'])
 args = parser.parse_args()
 
 
-def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
+def load_victim(epochs, dataset, model, loss, args, device):
 
     print("Loading victim model: ")
     if dataset == "imagenet":
@@ -94,31 +92,41 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
 
 
         return model
-    if watermark == "True":
+    if args.arch == "convnet":
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}WATERMARK.pth.tar",
+            f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
             map_location=device)
-    elif entropy == "True":
-        checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}ENTROPY.pth.tar",
-            map_location=device)
+        state_dict = checkpoint['state_dict']
+        new_state_dict = {}
+        # Remove head.
+        for k in list(state_dict.keys()):
+            print(k)
+            if k.startswith('backbone.'):
+                if k.startswith('backbone') and not k.startswith('backbone.out2'):
+                    # remove prefix
+                    new_state_dict[k[len("backbone."):]] = state_dict[k]
+            else:
+                new_state_dict[k] = state_dict[k]
+
+        log = model.load_state_dict(new_state_dict, strict=False)
+        assert log.missing_keys == ['out2.weight', 'out2.bias']
     else:
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+            f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
             map_location=device)
-    state_dict = checkpoint['state_dict']
-    new_state_dict = {}
-    # Remove head.
-    for k in list(state_dict.keys()):
-        if k.startswith('backbone.'):
-            if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                # remove prefix
-                new_state_dict[k[len("backbone."):]] = state_dict[k]
-        else:
-            new_state_dict[k] = state_dict[k]
+        state_dict = checkpoint['state_dict']
+        new_state_dict = {}
+        # Remove head.
+        for k in list(state_dict.keys()):
+            if k.startswith('backbone.'):
+                if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                    # remove prefix
+                    new_state_dict[k[len("backbone."):]] = state_dict[k]
+            else:
+                new_state_dict[k] = state_dict[k]
 
-    log = model.load_state_dict(new_state_dict, strict=False)
-    assert log.missing_keys == ['fc.weight', 'fc.bias']
+        log = model.load_state_dict(new_state_dict, strict=False)
+        assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
 def load_stolen(epochs, loss, model, dataset, queries, device):
@@ -224,23 +232,20 @@ def accuracy(output, target, topk=(1,)):
 
 if args.modeltype == "stolen":
     if args.head == "False":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     else:
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{args.epochs}{args.arch}STEALHEAD/"
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}{args.losstype}.log'
-    if args.defence == "True":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
-        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     if args.datasetsteal == "imagenet":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}IMAGENET.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
     # else:
     #     args.arch = "resnet34"
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
+    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
     logname = f'testing{args.modeltype}{args.dataset_test}.log'
 if args.clear == "True":
     if os.path.exists(os.path.join(log_dir, logname)):
@@ -255,9 +260,11 @@ elif args.arch == 'resnet34':
     model = ResNet34( num_classes=10).to(device)
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
+elif args.arch == 'convnet':
+    model = ConvNet(num_classes=10).to(device)
 
 if args.modeltype == "victim":
-    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
+    model = load_victim(args.epochstrain, args.dataset, model, args.losstype, args,
                                          device=device)
     print("Evaluating victim")
 else:
@@ -273,9 +280,14 @@ elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 
 # freeze all layers but the last fc (can try by training all layers)
-for name, param in model.named_parameters():
-    if name not in ['fc.weight', 'fc.bias', 'fc.0.weight', 'fc.0.bias']: # the imagenet model has fc.0 for the last layer
-        param.requires_grad = False
+if args.arch == "convnet":
+    for name, param in model.named_parameters():
+        if name not in ['out2.weight', 'out2.bias']:
+            param.requires_grad = False
+else:
+    for name, param in model.named_parameters():
+        if name not in ['fc.weight', 'fc.bias', 'fc.0.weight', 'fc.0.bias']: # the imagenet model has fc.0 for the last layer
+            param.requires_grad = False
 
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
@@ -331,6 +343,6 @@ for epoch in range(epochs):
 
 if args.save == "True":
     if args.modeltype == "stolen":
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
+        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLRBias/downstream/stolen_linear_{args.dataset_test}.pth.tar")
     else:
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLRBias/downstream/victim_linear_{args.dataset_test}.pth.tar")
