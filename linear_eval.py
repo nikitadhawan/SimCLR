@@ -55,7 +55,7 @@ parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
 parser.add_argument('--mu', default=5, type=float,
                     help='mean noise used for perturbations')
-parser.add_argument('--clear', default='False', type=str,
+parser.add_argument('--clear', default='True', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N',
@@ -232,9 +232,9 @@ def get_emnist_data_loaders(download, shuffle=False, batch_size=args.batch_size)
                                   transform=transforms.ToTensor(),split="letters")
     train_dataset.targets -= 1
     test_dataset.targets -= 1  # labels go from 0 to 25 instead of 1 to 26
-    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
-    test_dataset = torch.utils.data.Subset(test_dataset,
-                                           indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    # test_dataset = torch.utils.data.Subset(test_dataset,
+    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
     test_loader = DataLoader(test_dataset, batch_size=64,
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
@@ -283,17 +283,21 @@ logging.basicConfig(
     filename=os.path.join(log_dir, logname),
     level=logging.DEBUG)
 
+if args.dataset_test == "cifar100":
+    args.num_classes = 100
+elif args.dataset_test == "emnist":
+    args.num_classes = 26
+else:
+    args.num_classes = 10
+
 if args.arch == 'resnet18':
-    model = ResNet18(num_classes=10).to(device)
+    model = ResNet18(num_classes=args.num_classes).to(device)
 elif args.arch == 'resnet34':
-    model = ResNet34( num_classes=10).to(device)
+    model = ResNet34( num_classes=args.num_classes).to(device)
 elif args.arch == 'resnet50':
-    model = ResNet50(num_classes=10).to(device)
+    model = ResNet50(num_classes=args.num_classes).to(device)
 elif args.arch == 'convnet':
-    if args.dataset_test == "emnist":
-        model = ConvNet(num_classes=26).to(device)
-    else:
-        model = ConvNet(num_classes=10).to(device)
+    model = ConvNet(num_classes=args.num_classes).to(device)
 
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model, args.losstype, args,
@@ -376,6 +380,42 @@ for epoch in range(epochs):
     print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
     logging.debug(
         f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+
+# Per class accuracy:
+model.eval()
+losses = []
+correct = 0
+total = len(test_loader.dataset)
+correct_detailed = np.zeros(args.num_classes, dtype=np.int64)
+wrong_detailed = np.zeros(args.num_classes, dtype=np.int64)
+with torch.no_grad():
+    for data, target in test_loader:
+        data, target = data.cuda(), target.cuda()
+
+        output = model(data)
+
+        preds = output.data.argmax(axis=1)
+        labels = target.data.view_as(preds)
+        correct += preds.eq(labels).cpu().sum().item()
+        outputd = output.detach().cpu().numpy()
+        labels_np = labels.detach().cpu().numpy().astype(int)
+        preds_np = preds.detach().cpu().numpy().astype(int)
+
+
+        for label, pred in zip(target, preds):
+            if label == pred:
+                correct_detailed[label] += 1
+            else:
+                wrong_detailed[label] += 1
+
+acc = 100.0 * correct / total
+
+assert correct_detailed.sum() + wrong_detailed.sum() == total
+acc_detailed = 100.0 * correct_detailed / (
+        correct_detailed + wrong_detailed)
+print("acc detailed", acc_detailed)
+logging.debug(
+        f"detailed acc: {acc_detailed}")
 
 if args.save == "True":
     if args.modeltype == "stolen":
