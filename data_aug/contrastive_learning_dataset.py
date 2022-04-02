@@ -92,7 +92,17 @@ class ContrastiveLearningDataset:
                                                                   32),
                                                               n_views),
                                                           download=True),
+                          'emnist': lambda: datasets.EMNIST(
+                              f'/ssd003/home/{user}/data/',
+                              train=True,
+                              split="letters",
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform_grayscale(
+                                      28),
+                                  n_views),
+                              download=True),
                           'mixed': lambda: self.get_mixed_train(n_views),
+
 
                           }
 
@@ -122,6 +132,15 @@ class ContrastiveLearningDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
+                          'emnist': lambda: datasets.EMNIST(
+                              f'/ssd003/home/{user}/data/',
+                              train=False,
+                              split="letters",
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform_grayscale(
+                                      28),
+                                  n_views),
+                              download=False),
 
                           'mixed': lambda: self.get_mixed_test(n_views),
                           }
@@ -142,6 +161,15 @@ class RegularDataset:
     @staticmethod
     def get_simclr_pipeline_transform(size, s=1):
         data_transforms = transforms.Compose([transforms.ToTensor()])
+        return data_transforms
+
+    @staticmethod
+    def get_simclr_pipeline_transform_grayscale(size, s=1):
+        """Return a set of data augmentation transformations as described in the SimCLR paper for 1 channel datasets e.g. mnist"""
+        data_transforms = transforms.Compose(
+            [transforms.RandomResizedCrop(size=size),
+             transforms.RandomHorizontalFlip(),
+             transforms.ToTensor()])
         return data_transforms
 
 
@@ -201,6 +229,15 @@ class RegularDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
+                          'emnist': lambda: datasets.EMNIST(
+                              f'/ssd003/home/{user}/data/',
+                              train=True,
+                              split="letters",
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform_grayscale(
+                                      28),
+                                  n_views),
+                              download=True),
                           'mixed': lambda: self.get_mixed_train(n_views),
 
                           }
@@ -231,6 +268,15 @@ class RegularDataset:
                                                                 32),
                                                             n_views),
                                                         download=True),
+                          'emnist': lambda: datasets.EMNIST(
+                              f'/ssd003/home/{user}/data/',
+                              train=False,
+                              split="letters",
+                              transform=ContrastiveLearningViewGenerator(
+                                  self.get_simclr_pipeline_transform_grayscale(
+                                      28),
+                                  n_views),
+                              download=False),
                           'mixed': lambda: self.get_mixed_test(n_views),
                           }
 

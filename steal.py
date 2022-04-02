@@ -2,10 +2,10 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 from torchvision import models
-from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
-    RegularDataset, WatermarkDataset
-from models.resnet_simclr import SimSiam, WatermarkMLP
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, RegularDataset
+from models.resnet_simclr import SimSiam
 from models.resnet import ResNetSimCLR, ResNetSimCLRV2 # Being imported from other file.
+from models.convnet import ConvNetSimCLR  # simple convnet
 from simclr import SimCLR
 from utils import load_victim, load_watermark
 import os
@@ -17,20 +17,16 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default=f"/ssd003/home/{os.getenv('USER')}/data",
                     help='path to dataset')
-parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
-                    choices=model_names,
-                    help='model architecture: ' +
-                         ' | '.join(model_names) +
-                         ' (default: resnet50)')
-parser.add_argument('--archstolen', default='resnet34',
-                    choices=model_names,
-                    help='stolen model architecture: ' +
-                         ' | '.join(model_names) +
-                         ' (default: resnet34)')
+parser.add_argument('--dataset', default='mixed',
+                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet','mixed'])
+parser.add_argument('--datasetsteal', default='emnist',
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet','mnist','emnist'])
+parser.add_argument('-a', '--arch', metavar='ARCH', default='convnet',
+                    choices=["resnet34", "resnet50", "convnet"],
+                    help='model architecture: ')
+parser.add_argument('--archstolen', default='convnet',
+                    choices=["resnet34", "resnet50", "convnet"],
+                    help='model architecture')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
@@ -85,10 +81,6 @@ parser.add_argument('--mu', default=5, type=float,
                     help='mean noise used for perturbations')
 parser.add_argument('--clear', default='False', type=str,
                     help='Clear previous logs', choices=['True', 'False'])
-parser.add_argument('--watermark', default='False', type=str,
-                    help='Evaluate with watermark model from victim', choices=['True', 'False'])
-parser.add_argument('--entropy', default='False', type=str,
-                    help='Use entropy victim model', choices=['True', 'False'])
 parser.add_argument('--force', default='False', type=str,
                     help='Use cifar10 training set when stealing from cifar10 victim model.', choices=['True', 'False'])
 
@@ -161,52 +153,51 @@ def main():
         # 2048 dimensional output
     else:
         if args.victimhead == "False":
-            victim_model = ResNetSimCLRV2(base_model=args.arch,
-                                          out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
+            #victim_model = ResNetSimCLRV2(base_model=args.arch,
+            #                              out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
+            victim_model = ConvNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
-                                       device=args.device, discard_mlp = True, watermark=args.watermark, entropy=args.entropy)
+                                       device=args.device, discard_mlp = True)
         else:
-            victim_model = ResNetSimCLRV2(base_model=args.arch,
-                                          out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
+            # victim_model = ResNetSimCLRV2(base_model=args.arch,
+            #                               out_dim=args.out_dim,loss=args.lossvictim, include_mlp = True).to(args.device)
+            victim_model = ConvNetSimCLR(base_model=args.arch,
+                                          out_dim=args.out_dim,
+                                          loss=args.lossvictim,
+                                          include_mlp=True).to(args.device)
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
                                        device=args.device)
         if args.defence == "True": # Use the model head as part of the defence.
-            if args.entropy == "True":
-                victim_head = ResNetSimCLR(base_model=args.arch,
-                                             out_dim=args.out_dim,
-                                             entropy=args.entropy).to(args.device)
-            else:
-                victim_head = ResNetSimCLRV2(base_model=args.arch,
-                                              out_dim=args.out_dim,
-                                              loss=args.lossvictim,
-                                              include_mlp=True).to(args.device)
+            victim_head = ResNetSimCLRV2(base_model=args.arch,
+                                          out_dim=args.out_dim,
+                                          loss=args.lossvictim,
+                                          include_mlp=True).to(args.device)
 
             victim_head = load_victim(args.epochstrain, args.dataset,
                                        victim_head,
                                        args.arch, args.lossvictim,
-                                       device=args.device, entropy=args.entropy)
-
-        if args.watermark == "True":
-            watermark_dataset = WatermarkDataset(args.data).get_dataset(
-                args.dataset, args.n_views)
-            watermark_loader = torch.utils.data.DataLoader(
-                watermark_dataset, batch_size=args.batch_size, shuffle=True,
-                num_workers=args.workers, pin_memory=True, drop_last=True)
-            if args.stolenhead == "False":
-                watermark_mlp = WatermarkMLP(512,2)
-            else:
-                watermark_mlp = WatermarkMLP(128,2)
-            watermark_mlp = load_watermark(args.epochstrain, args.dataset,
-                                       watermark_mlp,
-                                       args.arch, args.lossvictim,
                                        device=args.device)
+
     if args.stolenhead == "False":
-        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype, include_mlp = False)
+        if args.archstolen == "convnet":
+            model = ConvNetSimCLR(base_model=args.archstolen,
+                                   out_dim=args.out_dim, loss=args.losstype,
+                                   include_mlp=False)
+        else:
+            model = ResNetSimCLRV2(base_model=args.archstolen,
+                                   out_dim=args.out_dim, loss=args.losstype,
+                                   include_mlp=False)
     else:
-        model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim,loss=args.losstype,
-                               include_mlp=True)
+        if args.archstolen == "convnet":
+            model = ConvNetSimCLR(base_model=args.archstolen,
+                                  out_dim=args.out_dim, loss=args.losstype,
+                                  include_mlp=True)
+        else:
+            model = ResNetSimCLRV2(base_model=args.archstolen,
+                                   out_dim=args.out_dim, loss=args.losstype,
+                                   include_mlp=True)
 
     if args.losstype == "symmetrized":
         model = SimSiam(models.__dict__[args.arch], args.out_dim, args.out_dim)
@@ -223,24 +214,11 @@ def main():
         query_loader), eta_min=0,last_epoch=-1)
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        # if args.defence == "True":
-        #     simclr = SimCLR(stealing=True, victim_model=victim_model, victim_head=victim_head,entropy_model=entropy_model,
-        #                     model=model, optimizer=optimizer, scheduler=scheduler,
-        #                     args=args, logdir=args.logdir, loss=args.losstype)
-        #     simclr.steal(query_loader, args.num_queries)
-        if args.watermark == "True":
-            simclr = SimCLR(stealing=True, victim_model=victim_model,
-                            watermark_mlp=watermark_mlp,
-                            model=model, optimizer=optimizer,
-                            scheduler=scheduler,
-                            args=args, logdir=args.logdir, loss=args.losstype)
-            simclr.steal(query_loader, args.num_queries, watermark_loader)
-        else:
-            simclr = SimCLR(stealing=True, victim_model=victim_model,
-                            model=model, optimizer=optimizer,
-                            scheduler=scheduler,
-                            args=args, logdir=args.logdir, loss=args.losstype)
-            simclr.steal(query_loader, args.num_queries)
+        simclr = SimCLR(stealing=True, victim_model=victim_model,
+                        model=model, optimizer=optimizer,
+                        scheduler=scheduler,
+                        args=args, logdir=args.logdir, loss=args.losstype)
+        simclr.steal(query_loader, args.num_queries)
 
 
 if __name__ == "__main__":

@@ -199,6 +199,7 @@ class SimCLR(object):
                 if self.loss == "softce":
                     loss = self.criterion(features,F.softmax(features, dim=1))  #  F.softmax(query_features/self.args.temperature, dim=1))
                 elif self.loss == "infonce":
+                    # TODO: features from victim is of incorrect dimension: check head loading
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
                     loss = self.criterion(logits, labels)

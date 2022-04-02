@@ -15,8 +15,6 @@ import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
 
-# TODO for testing: adjust stealing, add EMNIST, MNIST datasets for linear eval since only they will work with Convnet.
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
 
