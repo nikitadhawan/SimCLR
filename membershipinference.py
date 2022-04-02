@@ -150,10 +150,10 @@ test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=True, # shuffle true to ensure random selection of points
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-test_svhn = dataset2.get_test_dataset("svhn",1)
-test_loader_svhn = torch.utils.data.DataLoader(
-        test_svhn, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+# test_svhn = dataset2.get_test_dataset("svhn",1)
+# test_loader_svhn = torch.utils.data.DataLoader(
+#         test_svhn, batch_size=args.batch_size, shuffle=False,
+#         num_workers=args.workers, pin_memory=True, drop_last=True)
 
 # Transforms from contrastive_learning_dataset.py
 color_jitter = transforms.ColorJitter(0.8, 0.8 , 0.8, 0.2)
@@ -308,10 +308,10 @@ else:
     stolen_model.load_state_dict(state_dict)
 
 
-# if args.dataset == "imagenet":
-    # random_model2 = models.resnet50(pretrained=True).to(device)
-    # random_model2.fc = torch.nn.Identity().to(device) # This is a good model since it was trained on imagenet.
-    ###
+if args.dataset == "imagenet":
+    random_model2 = models.resnet50(pretrained=True).to(device)
+    random_model2.fc = torch.nn.Identity().to(device) # This is a good model since it was trained on imagenet.
+    ##
     # random_model = ResNetSimCLRV2(base_model=args.arch, out_dim=512, loss=None,
     #               include_mlp=False).to(device)
 
@@ -320,41 +320,36 @@ else:
     #             f"/checkpoint/{os.getenv('USER')}/SimCLR/100resnet18{loss}TRAIN/cifar10_checkpoint_9000_{loss}_cifar10.pth.tar",
     #             map_location=device)
     #
-# random_dict = checkpoint2['state_dict']
-random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
-#random_model.load_state_dict(random_dict)
-random_model = load_victim(50, "cifar10", random_model,
-                               "resnet18", "infonce",
-                               device=device, discard_mlp=True)
-
-random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
-                              include_mlp=False).to(
-    device)
-random_model2 = load_victim(100, "cifar10", random_model2,
-                           "resnet34", "infonce2",
-                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
-
-# SVHN random model: 
+else:
+    # CIFAR10 random model
+    # random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
+    #                               include_mlp=False).to(
+    #     device)
+    # random_model2 = load_victim(100, "cifar10", random_model2,
+    #                            "resnet34", "infonce2",
+    #                            device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+    #
+    # # SVHN random model:
 
 
-random_model2 = ResNetSimCLRNEW(base_model="resnet34", out_dim=128, loss=None,
-                              include_mlp=False).to(
-    device)
-random_model2 = load_victim(200, "svhn", random_model2,
-                           "resnet34", "infonce",
-                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+    random_model2 = ResNetSimCLRNEW(base_model="resnet34", out_dim=128, loss=None,
+                                  include_mlp=False).to(
+        device)
+    random_model2 = load_victim(200, "svhn", random_model2,
+                               "resnet34", "infonce",
+                               device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
 
                 
 victim_model.eval()
 stolen_model.eval()
-# random_model.eval()
 random_model2.eval()
 if args.victimhead == "True":
     only_head.eval()
 
 print("Loaded models.")
 
-randomtrain = [] # infonce loss across each batch
+# infonce loss across each batch
+randomtrain = []
 stolentrain = []
 victimtrain = []
 randomtest = []
