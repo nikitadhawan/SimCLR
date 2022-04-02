@@ -25,7 +25,7 @@ parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('--dataset', default='mixed',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
-parser.add_argument('--dataset-test', default='emnist',
+parser.add_argument('--dataset-test', default='mnist',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn', 'emnist', 'mnist'])
 parser.add_argument('--datasetsteal', default='cifar10',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
@@ -100,7 +100,6 @@ def load_victim(epochs, dataset, model, loss, args, device):
         new_state_dict = {}
         # Remove head.
         for k in list(state_dict.keys()):
-            print(k)
             if k.startswith('backbone.'):
                 if k.startswith('backbone') and not k.startswith('backbone.out2'):
                     # remove prefix
@@ -210,6 +209,36 @@ def get_svhn_data_loaders(download, shuffle=False, batch_size=args.batch_size):
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
+def get_mnist_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+    train_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=True, download=download,
+                                  transform=transforms.ToTensor())
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                            num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=False, download=download,
+                                  transform=transforms.ToTensor())
+    # indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    # test_dataset = torch.utils.data.Subset(test_dataset,
+    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=shuffle)
+    return train_loader, test_loader
+
+def get_emnist_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+    train_dataset = datasets.EMNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=True, download=download,
+                                  transform=transforms.ToTensor(), split="letters")
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                            num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.EMNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=False, download=download,
+                                  transform=transforms.ToTensor(),split="letters")
+    train_dataset.targets -= 1
+    test_dataset.targets -= 1  # labels go from 0 to 25 instead of 1 to 26
+    indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
+    test_dataset = torch.utils.data.Subset(test_dataset,
+                                           indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=shuffle)
+    return train_loader, test_loader
+
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -261,7 +290,10 @@ elif args.arch == 'resnet34':
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
 elif args.arch == 'convnet':
-    model = ConvNet(num_classes=10).to(device)
+    if args.dataset_test == "emnist":
+        model = ConvNet(num_classes=26).to(device)
+    else:
+        model = ConvNet(num_classes=10).to(device)
 
 if args.modeltype == "victim":
     model = load_victim(args.epochstrain, args.dataset, model, args.losstype, args,
@@ -278,6 +310,10 @@ elif args.dataset_test == 'stl10':
     train_loader, test_loader = get_stl10_data_loaders(download=False)
 elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
+elif args.dataset_test == "mnist":
+    train_loader, test_loader = get_mnist_data_loaders(download=False)
+elif args.dataset_test == "emnist":
+    train_loader, test_loader = get_emnist_data_loaders(download=True)
 
 # freeze all layers but the last fc (can try by training all layers)
 if args.arch == "convnet":
