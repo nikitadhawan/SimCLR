@@ -24,10 +24,7 @@ class SimCLR(object):
         self.scheduler = kwargs['scheduler']
         self.log_dir = 'runs/' + logdir
         if stealing:
-            if self.args.defence == "True":
-                self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{self.args.epochs}{self.args.archstolen}{self.args.losstype}DEFENCE/"  # save logs here.
-            else:
-                self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
+            self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{self.args.epochs}{self.args.archstolen}{self.args.losstype}STEAL/" # save logs here.
         else:
             self.log_dir2 = f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{self.args.epochs}{self.args.arch}{self.args.losstype}TRAIN/"
         self.stealing = stealing
@@ -199,7 +196,6 @@ class SimCLR(object):
                 if self.loss == "softce":
                     loss = self.criterion(features,F.softmax(features, dim=1))  #  F.softmax(query_features/self.args.temperature, dim=1))
                 elif self.loss == "infonce":
-                    # TODO: features from victim is of incorrect dimension: check head loading
                     all_features = torch.cat([features, query_features], dim=0)
                     logits, labels = self.info_nce_loss(all_features)
                     loss = self.criterion(logits, labels)

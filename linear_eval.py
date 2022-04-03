@@ -25,8 +25,8 @@ parser.add_argument('--dataset', default='mixed',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
 parser.add_argument('--dataset-test', default='mnist',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn', 'emnist', 'mnist'])
-parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
+parser.add_argument('--datasetsteal', default='emnist',
+                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed','emnist','mnist'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='convnet',
         choices=['resnet18', 'resnet34', 'resnet50', 'convnet'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=50000,type=int,
@@ -132,40 +132,53 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
 
     if args.head == "False":
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
+            f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
             map_location=device)
     else:
         checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
+        f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
 
     if args.defence == "True":
         checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}DEFENCE/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
+            f"/checkpoint/{os.getenv('USER')}/SimCLRBias/{epochs}{args.arch}{loss}DEFENCE/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
             map_location=device)
         print("Used defence")
 
     state_dict = checkpoint['state_dict']
     new_state_dict = {}
-    # Remove head.
-    if loss == "symmetrized":
-        for k in list(state_dict.keys()):
-            if k.startswith('encoder.'):
-                if k.startswith('encoder') and not k.startswith('encoder.fc'):
-                    # remove prefix
-                    new_state_dict[k[len("encoder."):]] = state_dict[k]
-            else:
-                new_state_dict[k] = state_dict[k]
-    else:
+    if args.arch == "convnet":
+        # Remove head.
         for k in list(state_dict.keys()):
             if k.startswith('backbone.'):
-                if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                if k.startswith('backbone') and not k.startswith('backbone.out2'):
                     # remove prefix
                     new_state_dict[k[len("backbone."):]] = state_dict[k]
             else:
                 new_state_dict[k] = state_dict[k]
 
-    log = model.load_state_dict(new_state_dict, strict=False)
-    assert log.missing_keys == ['fc.weight', 'fc.bias']
+        log = model.load_state_dict(new_state_dict, strict=False)
+        assert log.missing_keys == ['out2.weight', 'out2.bias']
+    else:
+        if loss == "symmetrized":
+            for k in list(state_dict.keys()):
+                if k.startswith('encoder.'):
+                    if k.startswith('encoder') and not k.startswith(
+                            'encoder.fc'):
+                        # remove prefix
+                        new_state_dict[k[len("encoder."):]] = state_dict[k]
+                else:
+                    new_state_dict[k] = state_dict[k]
+        else:
+            for k in list(state_dict.keys()):
+                if k.startswith('backbone.'):
+                    if k.startswith('backbone') and not k.startswith('backbone.fc'):
+                        # remove prefix
+                        new_state_dict[k[len("backbone."):]] = state_dict[k]
+                else:
+                    new_state_dict[k] = state_dict[k]
+
+        log = model.load_state_dict(new_state_dict, strict=False)
+        assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):

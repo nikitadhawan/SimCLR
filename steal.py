@@ -155,7 +155,7 @@ def main():
         if args.victimhead == "False":
             #victim_model = ResNetSimCLRV2(base_model=args.arch,
             #                              out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
-            victim_model = ConvNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
+            victim_model = ConvNetSimCLR(base_model=args.arch, out_dim=args.out_dim, include_mlp = False)
             victim_model = load_victim(args.epochstrain, args.dataset, victim_model,
                                        args.arch, args.lossvictim,
                                        device=args.device, discard_mlp = True)

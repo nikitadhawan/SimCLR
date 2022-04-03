@@ -45,7 +45,7 @@ def load_victim(epochs, dataset, model, arch, loss, device, discard_mlp=False, w
     new_state_dict = state_dict.copy()
     if discard_mlp: # no longer necessary as the model architecture has no backbone.fc layers
         for k in list(state_dict.keys()):
-            if k.startswith('backbone.out2'):
+            if k.startswith('backbone.out2') or k.startswith('backbone.fc'):
                 del new_state_dict[k]
         model.load_state_dict(new_state_dict, strict=False)
         return model
