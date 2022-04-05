@@ -14,6 +14,7 @@ from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
+import random
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
@@ -23,8 +24,8 @@ parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
 parser.add_argument('--dataset', default='mixed',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed'])
-parser.add_argument('--dataset-test', default='mnist',
-                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn', 'emnist', 'mnist'])
+parser.add_argument('--dataset-test', default='bias',
+                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn', 'emnist', 'mnist','bias'])
 parser.add_argument('--datasetsteal', default='emnist',
                     help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet', 'mixed','emnist','mnist'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='convnet',
@@ -250,6 +251,41 @@ def get_emnist_data_loaders(download, shuffle=False, batch_size=args.batch_size)
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
+def get_bias_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+    # only include 1000 samples from the training set.
+    train_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=True, download=download,
+                                  transform=transforms.ToTensor())
+    # select fixed number of samples per class
+    nums = [0 for i in range(10)]
+    targets = train_dataset.targets
+    indxs = []
+    total = 1000 # number of samples to select
+    for i in range(len(train_dataset)):
+        if nums[targets[i]] < total/10:
+            indxs.append(i)
+            nums[targets[i]] += 1
+        if len(indxs) == total:
+            break
+    # print("nums", nums)
+    # print("len", len(indxs))
+    # indxs = random.sample(range(len(train_dataset)), 300)
+    # nums = [0 for i in range(10)]
+    # for i in indxs:
+    #     nums[train_dataset.targets[i]] += 1
+    # print("Numbers from each class", nums)
+    train_dataset = torch.utils.data.Subset(train_dataset, indxs)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                            num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=False, download=download,
+                                  transform=transforms.ToTensor())
+    #indxs =  list(range(len(test_dataset) - 1000, len(test_dataset)))
+    # test_dataset = torch.utils.data.Subset(test_dataset,
+    #                                        indxs)  # only select last 1000 samples to prevent overlap with queried samples.
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=shuffle)
+    return train_loader, test_loader
+
+
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -329,6 +365,8 @@ elif args.dataset_test == "mnist":
     train_loader, test_loader = get_mnist_data_loaders(download=False)
 elif args.dataset_test == "emnist":
     train_loader, test_loader = get_emnist_data_loaders(download=True)
+elif args.dataset_test == "bias":
+    train_loader, test_loader = get_bias_data_loaders(download=True)
 
 # freeze all layers but the last fc (can try by training all layers)
 if args.arch == "convnet":
