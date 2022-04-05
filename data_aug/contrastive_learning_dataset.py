@@ -3,7 +3,8 @@ from data_aug.gaussian_blur import GaussianBlur
 from torchvision import transforms, datasets
 from data_aug.view_generator import ContrastiveLearningViewGenerator, WatermarkViewGenerator
 from exceptions.exceptions import InvalidDatasetSelection
-from torch.utils.data import ConcatDataset
+from torch.utils.data import ConcatDataset, Subset
+import random
 import os
 import getpass
 user = getpass.getuser()
@@ -45,14 +46,33 @@ class ContrastiveLearningDataset:
                                    self.get_simclr_pipeline_transform_grayscale(28),
                                    n_views),
                                download=False)
-        idx = (mnist.targets == 2) | (mnist.targets == 3)
-        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
-        mnist.data = mnist.data[idx]
-        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
-        combined = ConcatDataset([fmnist, mnist])
+        # idx = (mnist.targets == 2) | (mnist.targets == 3)
+        # mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        # mnist.data = mnist.data[idx]
+        # mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        # combined = ConcatDataset([fmnist, mnist])
+        # Other approach: only use mnist but reduce number of samples from specific classes
+        # 5000/10 = 500 for unbalanced classes, 5000 for balanced
+        numselect = [5000 for i in range(10)]
+        under = [0, 2, 4] # classes to underrepresent
+        for i in under:
+            numselect[i] = 500
+        indxs = []
+        nums = [0 for i in range(10)]
+        targets = mnist.targets
+        l = [i for i in range(len(mnist))]
+        random.shuffle(l)
+        for i in l:
+            if nums[targets[i]] < numselect[targets[i]]:
+                indxs.append(i)
+                nums[targets[i]] += 1
+        # print("nums", nums)
+        # print("indx", len(indxs))
+        combined = Subset(mnist, indxs)
         return combined
 
     def get_mixed_test(self,n_views):
+        raise Exception('Not using testset from mixed')
         fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/', train=False,
                                        transform=ContrastiveLearningViewGenerator(
                                            get_simclr_pipeline_transform_grayscale(28),
@@ -66,7 +86,7 @@ class ContrastiveLearningDataset:
         idx = (mnist.targets == 2) | (mnist.targets == 3)
         mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
         mnist.data = mnist.data[idx]
-        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        mnist.targets = mnist.targets + 8  # to make 2's as labeled 10, 3's as 11 so they can be combined with fmnist
         combined = ConcatDataset([fmnist, mnist])
         return combined
 
@@ -184,14 +204,33 @@ class RegularDataset:
                                    self.get_simclr_pipeline_transform(28),
                                    n_views),
                                download=False)
-        idx = (mnist.targets == 2) | (mnist.targets == 3)
-        mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
-        mnist.data = mnist.data[idx]
-        mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
-        combined = ConcatDataset([fmnist, mnist])
+        # idx = (mnist.targets == 2) | (mnist.targets == 3)
+        # mnist.targets = mnist.targets[idx]  # only select 2's and 3's from mnist
+        # mnist.data = mnist.data[idx]
+        # mnist.targets = mnist.targets + 8  # to make 2's be labeled 10, 3's as 11 so they can be combined with fmnist
+        # combined = ConcatDataset([fmnist, mnist])
+        # Other approach: only use mnist but reduce number of samples from specific classes
+        # 5000/10 = 500 for unbalanced classes, 5000 for balanced
+        numselect = [5000 for i in range(10)]
+        under = [0, 2, 4]  # classes to underrepresent
+        for i in under:
+            numselect[i] = 500
+        indxs = []
+        nums = [0 for i in range(10)]
+        targets = mnist.targets
+        l = [i for i in range(len(mnist))]
+        random.shuffle(l)
+        for i in l:
+            if nums[targets[i]] < numselect[targets[i]]:
+                indxs.append(i)
+                nums[targets[i]] += 1
+        # print("nums", nums)
+        # print("indx", len(indxs))
+        combined = Subset(mnist, indxs)
         return combined
 
     def get_mixed_test(self,n_views):
+        raise Exception('Not using testset from mixed')
         fmnist = datasets.FashionMNIST(f'/ssd003/home/{user}/data/',
                                        train=False,
                                        transform=ContrastiveLearningViewGenerator(

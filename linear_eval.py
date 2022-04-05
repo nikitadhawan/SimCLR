@@ -61,8 +61,13 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
+parser.add_argument('--bias_samples', default=100, type=int, metavar='N',
+                    help='Number of samples to train downstream model to see effect of bias')
 args = parser.parse_args()
-
+if args.bias_samples < 1000:
+    args.batch_size = 64
+if args.bias_samples <= 100:
+    args.batch_size = 32
 
 def load_victim(epochs, dataset, model, loss, args, device):
 
@@ -251,7 +256,7 @@ def get_emnist_data_loaders(download, shuffle=False, batch_size=args.batch_size)
                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_bias_data_loaders(download, shuffle=False, batch_size=args.batch_size):
+def get_bias_data_loaders(download, shuffle=False, batch_size=args.batch_size, num_train=args.bias_samples):
     # only include 1000 samples from the training set.
     train_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=True, download=download,
                                   transform=transforms.ToTensor())
@@ -259,23 +264,22 @@ def get_bias_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     nums = [0 for i in range(10)]
     targets = train_dataset.targets
     indxs = []
-    total = 1000 # number of samples to select
-    for i in range(len(train_dataset)):
+    total = num_train # number of samples to select
+    l = [i for i in range(len(train_dataset))]
+    random.shuffle(l)  # randomly shuffle samples
+    for i in l:
         if nums[targets[i]] < total/10:
             indxs.append(i)
             nums[targets[i]] += 1
         if len(indxs) == total:
             break
-    # print("nums", nums)
-    # print("len", len(indxs))
-    # indxs = random.sample(range(len(train_dataset)), 300)
-    # nums = [0 for i in range(10)]
-    # for i in indxs:
-    #     nums[train_dataset.targets[i]] += 1
+
     # print("Numbers from each class", nums)
+    # print("indxs", indxs)
+
     train_dataset = torch.utils.data.Subset(train_dataset, indxs)
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
+                            num_workers=0, drop_last=True, shuffle=shuffle)
     test_dataset = datasets.MNIST(f"/ssd003/home/{os.getenv('USER')}/data", train=False, download=download,
                                   transform=transforms.ToTensor())
     #indxs =  list(range(len(test_dataset) - 1000, len(test_dataset)))
@@ -366,7 +370,7 @@ elif args.dataset_test == "mnist":
 elif args.dataset_test == "emnist":
     train_loader, test_loader = get_emnist_data_loaders(download=True)
 elif args.dataset_test == "bias":
-    train_loader, test_loader = get_bias_data_loaders(download=True)
+    train_loader, test_loader = get_bias_data_loaders(download=True, num_train=args.bias_samples)
 
 # freeze all layers but the last fc (can try by training all layers)
 if args.arch == "convnet":
