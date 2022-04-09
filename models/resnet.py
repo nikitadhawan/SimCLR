@@ -195,7 +195,7 @@ class ResNetSimCLRV2(nn.Module):
         super(ResNetSimCLRV2, self).__init__()
         self.resnet_dict = {"resnet18": ResNet18(num_classes=out_dim),
                             "resnet34": ResNet34( num_classes=out_dim),
-                            "resnet50": ResNet50(num_classes=out_dim)} 
+                            "resnet50": ResNet50(num_classes=out_dim)}
 
         self.backbone = self._get_basemodel(base_model)
         self.include_mlp = include_mlp
@@ -227,7 +227,6 @@ class ResNetSimCLRV2(nn.Module):
         x = self.backbone.layer2(x)
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
-        x = torch.flatten(x, 1)
         x = F.avg_pool2d(x, 4)
         x = x.view(x.size(0), -1)
         if self.include_mlp:
@@ -238,10 +237,10 @@ class ResNetSimCLRV2(nn.Module):
 
 def trial():
     device = 'cuda'
-    model = ResNetSimCLR(base_model="resnet34", out_dim=128,
-                 entropy=False, include_mlp=False).to(device)
+    model = ResNetSimCLRV2(base_model="resnet34", out_dim=128,include_mlp=False).to(device)
     from torchsummary import summary
     summary(model, input_size = (3,32,32))
+    print(model(torch.rand((1,3,32,32)).cuda()).shape)
 
 
 
