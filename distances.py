@@ -201,7 +201,7 @@ random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, inc
 #random_model.load_state_dict(random_dict)
 random_model = load_victim(50, "cifar10", random_model,
                                "resnet18", "infonce",
-                               device=device, discard_mlp=True)
+                               device=device, discard_mlp=True)  # TODO: Replace with ResNetSimCLRNEW and 5- epochs.
 
 random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
                               include_mlp=False).to(
@@ -224,7 +224,7 @@ softnnvic = []
 msevic = []
 
 
-for counter, (images, truelabels) in enumerate(tqdm(val_loader)): # Augmented train loader with two views for each image (could be augmentation or rotation)
+for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # Augmented train loader with two views for each image (could be augmentation or rotation)
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
@@ -277,6 +277,7 @@ for counter, (images, truelabels) in enumerate(
     softnnvictest.extend(distsoftnn.tolist())
     msevictest.extend(distmse.tolist())
 
+print("Number of samples", len(softnnvic))
 
 print(f"Victim random differences: Train {np.mean(randomvic)}+-{np.std(randomvic)},   Test {np.mean(randomvictest)}+-{np.std(randomvictest)} ")
 print(f"Victim infonce differences: Train {np.mean(infoncevic)}+-{np.std(infoncevic)},   Test {np.mean(infoncevictest)}+-{np.std(infoncevictest)} ")
@@ -295,5 +296,5 @@ print('Null hypothesis vic_rand <= infoncevic ', ' pval: ', pval)
 tval, pval = ttest(infoncevic, msevic,  alternative="greater")
 print('Null hypothesis infoncevic <= msevic ', ' pval: ', pval)
 
-tval, pval = ttest(infoncevic, softnnvic,  alternative="greater")
-print('Null hypothesis infoncevic <= softnnvic ', ' pval: ', pval)
+tval, pval = ttest(infoncevic, softnnvic,  alternative="two.sided")
+print('Null hypothesis infoncevic == softnnvic ', ' pval: ', pval)
