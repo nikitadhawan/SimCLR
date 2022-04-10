@@ -197,18 +197,11 @@ state_dict = checkpoint['state_dict']
 stolen_model_mse.load_state_dict(state_dict)
 
 
-random_model = ResNetSimCLRV2(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
+random_model = ResNetSimCLRNEW(base_model="resnet18", out_dim=128, loss=None, include_mlp = False).to(device) # Note: out_dim does not matter since last layer has no effect.
 #random_model.load_state_dict(random_dict)
 random_model = load_victim(50, "cifar10", random_model,
                                "resnet18", "infonce",
-                               device=device, discard_mlp=True)  # TODO: Replace with ResNetSimCLRNEW and 5- epochs.
-
-random_model2 = ResNetSimCLRV2(base_model="resnet34", out_dim=128, loss=None,
-                              include_mlp=False).to(
-    device)
-random_model2 = load_victim(100, "cifar10", random_model2,
-                           "resnet34", "infonce2",
-                           device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+                               device=device, discard_mlp=True)
 
 
 victim_model.eval()
@@ -216,7 +209,6 @@ stolen_model_infonce.eval()
 stolen_model_softnn.eval()
 stolen_model_mse.eval()
 random_model.eval()
-random_model2.eval()
 
 randomvic = []
 infoncevic = []
@@ -228,7 +220,7 @@ for counter, (images, truelabels) in enumerate(tqdm(train_loader)): # Augmented 
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
-    random_features = random_model2(images)
+    random_features = random_model(images)
     stolen_features_infonce = stolen_model_infonce(images)
     distvr = (victim_features - random_features).pow(2).sum(1).sqrt()
     distinfonce = (victim_features - stolen_features_infonce).pow(2).sum(1).sqrt()
@@ -257,7 +249,7 @@ for counter, (images, truelabels) in enumerate(
     images = torch.cat(images, dim=0)
     images = images.to(device)
     victim_features = victim_model(images)
-    random_features = random_model2(images)
+    random_features = random_model(images)
     stolen_features_infonce = stolen_model_infonce(images)
     distvr = (victim_features - random_features).pow(2).sum(1).sqrt()
     distinfonce = (victim_features - stolen_features_infonce).pow(2).sum(
