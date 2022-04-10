@@ -10,8 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.autograd import Variable
-
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -95,6 +93,45 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
+    def forward_encoder(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4)
+        out = out.view(out.size(0), -1)
+        return out
+
+    def forward(self, x):
+        out = self.forward_encoder(x=x)
+        out = self.fc(out)
+        return out
+
+
+class ResNetEncoder(nn.Module):
+    def __init__(self, block, num_blocks, num_classes=10, name=''):
+        super(ResNet, self).__init__()
+        self.in_planes = 64
+        self.name = name
+        self.num_classes = num_classes
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1,
+                               bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, stride))
+            self.in_planes = planes * block.expansion
+        return nn.Sequential(*layers)
+
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)
@@ -103,7 +140,6 @@ class ResNet(nn.Module):
         out = self.layer4(out)
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
-        out = self.fc(out)
         return out
 
 
@@ -123,13 +159,16 @@ def ResNet14(name, args):
 
 
 def ResNet16(name, args):
-    return ResNet(BasicBlock, [2, 2, 2, 1], num_classes=num_classes,
+    return ResNet(BasicBlock, [2, 2, 2, 1], num_classes=args.num_classes,
                   name=name)
 
 
 def ResNet18(num_classes=10):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=num_classes
-                  )
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=num_classes)
+
+
+def ResNet18Encoder(num_classes=10):
+    return ResNetEncoder(BasicBlock, [2, 2, 2, 2], num_classes=num_classes)
 
 
 def ResNet34(num_classes=10):
@@ -150,15 +189,17 @@ def ResNet152():
 
 class ResNetSimCLR(nn.Module):
 
-    def __init__(self, base_model, out_dim, loss=None, include_mlp = True, entropy=False):
+    def __init__(self, base_model, out_dim, loss=None, include_mlp=True,
+                 entropy=False):
         super(ResNetSimCLR, self).__init__()
         self.resnet_dict = {"resnet18": ResNet18(num_classes=out_dim),
-                            "resnet34": ResNet34( num_classes=out_dim),
-                            "resnet50": ResNet50(num_classes=out_dim)} # Dont use ResNet50
+                            "resnet34": ResNet34(num_classes=out_dim),
+                            "resnet50": ResNet50(
+                                num_classes=out_dim)}  # Dont use ResNet50
         self.backbone = self._get_basemodel(base_model)
         self.loss = loss
         self.entropy = entropy
-        dim_mlp = self.backbone.fc.in_features # 512
+        dim_mlp = self.backbone.fc.in_features  # 512
         print("dim", dim_mlp)
         if include_mlp:
             # add mlp projection head
@@ -167,14 +208,16 @@ class ResNetSimCLR(nn.Module):
             if self.loss == "symmetrized":
                 self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
                                                  nn.BatchNorm1d(dim_mlp),
-                                                 nn.ReLU(inplace=True), self.backbone.fc)
+                                                 nn.ReLU(inplace=True),
+                                                 self.backbone.fc)
             else:
-                self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.backbone.fc)
+                self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
+                                                 nn.ReLU(), self.backbone.fc)
         else:
-            #self.backbone.fc = nn.Linear(dim_mlp, dim_mlp, bias=False)
-            #self.backbone.fc.weight.data.copy_(torch.eye(dim_mlp))
-            #self.backbone.fc.weight.requires_grad = False # last layer does nothing. only there to be compatible with resnet
-            self.backbone.fc = nn.Identity() # no head used
+            # self.backbone.fc = nn.Linear(dim_mlp, dim_mlp, bias=False)
+            # self.backbone.fc.weight.data.copy_(torch.eye(dim_mlp))
+            # self.backbone.fc.weight.requires_grad = False # last layer does nothing. only there to be compatible with resnet
+            self.backbone.fc = nn.Identity()  # no head used
 
     def _get_basemodel(self, model_name):
         try:
@@ -194,7 +237,7 @@ class ResNetSimCLRV2(nn.Module):
     def __init__(self, base_model, out_dim, loss=None, include_mlp=False):
         super(ResNetSimCLRV2, self).__init__()
         self.resnet_dict = {"resnet18": ResNet18(num_classes=out_dim),
-                            "resnet34": ResNet34( num_classes=out_dim),
+                            "resnet34": ResNet34(num_classes=out_dim),
                             "resnet50": ResNet50(num_classes=out_dim)}
 
         self.backbone = self._get_basemodel(base_model)
@@ -234,14 +277,13 @@ class ResNetSimCLRV2(nn.Module):
         return x
 
 
-
 def trial():
     device = 'cuda'
-    model = ResNetSimCLRV2(base_model="resnet34", out_dim=128,include_mlp=False).to(device)
+    model = ResNetSimCLRV2(base_model="resnet34", out_dim=128,
+                           include_mlp=False).to(device)
     from torchsummary import summary
-    summary(model, input_size = (3,32,32))
-    print(model(torch.rand((1,3,32,32)).cuda()).shape)
-
+    summary(model, input_size=(3, 32, 32))
+    print(model(torch.rand((1, 3, 32, 32)).cuda()).shape)
 
 
 if __name__ == "__main__":
