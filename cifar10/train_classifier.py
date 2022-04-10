@@ -138,8 +138,9 @@ def test(epoch):
     acc = 100. * correct / total
     if acc > best_acc:
         print('Saving..')
+        model = net.module
         state = {
-            'net': net.state_dict(),
+            'state_dict': model.state_dict(),
             'acc': acc,
             'epoch': epoch,
         }

@@ -70,9 +70,29 @@ if device == 'cuda':
 print('==> Resuming from checkpoint..')
 assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
 checkpoint = torch.load('./checkpoint/ckpt.pth')
-net.load_state_dict(checkpoint['net'])
+
+if 'net' in checkpoint:
+    key = 'net'
+elif 'state_dict' in checkpoint:
+    key = 'state_dict'
+else:
+    raise Exception("Missing key net of state dict in the checkpoint.")
+net.load_state_dict(checkpoint[key])
 best_acc = checkpoint['acc']
 start_epoch = checkpoint['epoch']
+net = net.module
+
+state = {
+    'state_dict': net.state_dict(),
+    'acc': best_acc,
+    'epoch': start_epoch,
+}
+if not os.path.isdir('checkpoint'):
+    os.mkdir('checkpoint')
+torch.save(state, './checkpoint/ckpt_state_dict.pth')
+
+print('start epoch: ', start_epoch)
+print('best acc: ', best_acc)
 
 criterion = nn.CrossEntropyLoss()
 

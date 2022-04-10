@@ -111,7 +111,7 @@ class ResNet(nn.Module):
 
 class ResNetEncoder(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10, name=''):
-        super(ResNet, self).__init__()
+        super(ResNetEncoder, self).__init__()
         self.in_planes = 64
         self.name = name
         self.num_classes = num_classes

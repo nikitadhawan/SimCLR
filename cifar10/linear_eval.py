@@ -7,48 +7,78 @@ import matplotlib.pyplot as plt
 import torchvision
 import argparse
 from torch.utils.data import DataLoader
-#from models.resnet_simclr import ResNetSimCLR
-from models.resnet import ResNetSimCLR, ResNet18, ResNet34 , ResNet50 # from other file
+# from models.resnet_simclr import ResNetSimCLR
+from models.resnet import ResNetSimCLR, ResNet18, ResNet18Encoder, ResNet34, \
+    ResNet50  # from other file
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 import torchvision.transforms as transforms
 import logging
 from torchvision import datasets
-
+import getpass
+import torch.backends.cudnn as cudnn
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
 
+user = getpass.getuser()
+
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-folder-name', metavar='DIR', default='test',
                     help='path to dataset')
-parser.add_argument('--dataset', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('--dataset-test', default='cifar10',
-                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
-        choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
-parser.add_argument('-n', '--num-labeled', default=50000,type=int,
-                     help='Number of labeled examples to train on')
+# dataset = 'svhn'
+# num_examples = 73257
+
+# dataset = 'cifar10'
+# num_examples = 50000
+
+dataset = 'stl10'
+num_examples = 5000
+
+parser.add_argument('--dataset',
+                    # default='cifar10',
+                    default=dataset,
+                    help='dataset name',
+                    choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
+parser.add_argument('--dataset-test',
+                    # default='cifar10',
+                    # default='svhn',
+                    default=dataset,
+                    help='dataset to run downstream task on',
+                    choices=['stl10', 'cifar10', 'svhn'])
+parser.add_argument('--datasetsteal',
+                    # default='cifar10',
+                    default=dataset,
+                    help='dataset used for querying the victim',
+                    choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
+                    choices=['resnet18', 'resnet34', 'resnet50'],
+                    help='model architecture')
+parser.add_argument('-n', '--num-labeled',
+                    # default=50000,
+                    default=num_examples,
+                    type=int,
+                    help='Number of labeled examples to train on')
 parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--lr', default=1e-4, type=float, # maybe try other lrs
+parser.add_argument('--lr', default=1e-4, type=float,  # maybe try other lrs
                     help='learning rate to train the model with.')
-parser.add_argument('--modeltype', default='stolen', type=str,
-                    help='Type of model to evaluate', choices=['victim', 'stolen'])
+parser.add_argument('--modeltype', default='victim', type=str,
+                    help='Type of model to evaluate',
+                    choices=['victim', 'stolen'])
 parser.add_argument('--save', default='False', type=str,
                     help='Save final model', choices=['True', 'False'])
 parser.add_argument('--losstype', default='infonce', type=str,
                     help='Loss function to use.')
 parser.add_argument('--head', default='False', type=str,
-                    help='stolen model was trained using recreated head.', choices=['True', 'False'])
+                    help='stolen model was trained using recreated head.',
+                    choices=['True', 'False'])
 parser.add_argument('--defence', default='False', type=str,
-                    help='Use defence on the victim side by perturbing outputs', choices=['True', 'False'])
+                    help='Use defence on the victim side by perturbing outputs',
+                    choices=['True', 'False'])
 parser.add_argument('--sigma', default=0.5, type=float,
                     help='standard deviation used for perturbations')
 parser.add_argument('--mu', default=5, type=float,
@@ -61,24 +91,69 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--watermark', default='False', type=str,
-                    help='Watermark used when training the model', choices=['True', 'False'])
+                    help='Watermark used when training the model',
+                    choices=['True', 'False'])
 parser.add_argument('--entropy', default='False', type=str,
-                    help='Additional softmax layer when training the model', choices=['True', 'False'])
+                    help='Additional softmax layer when training the model',
+                    choices=['True', 'False'])
 args = parser.parse_args()
+
+if user == 'ady':
+    prefix = '/h/321/ady/code/SimCLR/'
+    data_path = '/home/nicolas/'
+else:
+    prefix = ''
+    data_path = ''
+
+
+def load_victim_encoder(epochs, dataset, model, loss, watermark, entropy,
+                        device):
+    # checkpoint = torch.load(
+    #     f"/h/321/{user}/code/SimCLR/{args.dataset}/checkpoint/{args.dataset}{args.arch}SLepoch{epochs}.pth",
+    #     map_location=device)
+    # if 'net' in checkpoint:
+    #     key = 'net'
+    # elif 'state_dict' in checkpoint:
+    #     key = 'state_dict'
+    # else:
+    #     raise Exception("Missing key net of state dict in the checkpoint.")
+    # state_dict = checkpoint[key]
+    # model = model.load_state_dict(state_dict, strict=True)
+    # return model
+
+    # Load checkpoint.
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('./checkpoint/ckpt.pth')
+
+    if 'net' in checkpoint:
+        key = 'net'
+    elif 'state_dict' in checkpoint:
+        key = 'state_dict'
+    else:
+        raise Exception("Missing key net of state dict in the checkpoint.")
+    model.load_state_dict(checkpoint[key])
+    best_acc = checkpoint['acc']
+    start_epoch = checkpoint['epoch']
+    print('best acc: ', best_acc, ' start epoch: ', start_epoch)
+    net = model.module
+    net.fc = torch.nn.Linear(512, 10).to(device=device)
+
+    return net
 
 
 def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
-
     print("Loading victim model: ")
     if dataset == "imagenet":
         # model = torchvision.models.resnet50(pretrained=True).to(device) # Pytorch pretrained resnet
         # model.fc = torch.nn.Linear(2048, 10).to(device)
 
-        class ResNet50(torch.nn.Module):   # model from SimCLR
+        class ResNet50(torch.nn.Module):  # model from SimCLR
             def __init__(self, pretrained, num_classes=10):
                 super(ResNet50, self).__init__()
                 self.pretrained = pretrained
-                self.fc = torch.nn.Sequential(torch.nn.Linear(512 * 4 * 1, num_classes))
+                self.fc = torch.nn.Sequential(
+                    torch.nn.Linear(512 * 4 * 1, num_classes))
 
             def forward(self, x):
                 x = self.pretrained(x)
@@ -86,12 +161,12 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
                 return x
 
         model = resnet50rep().to(device)
-        checkpoint = torch.load(   # change path
-                f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth', map_location=device)
+        checkpoint = torch.load(  # change path
+            f'/ssd003/home/akaleem/SimCLR/models/resnet50-1x.pth',
+            map_location=device)
         state_dict = checkpoint['state_dict']
         model.load_state_dict(state_dict, strict=False)
         model = ResNet50(pretrained=model).to(device)
-
 
         return model
     if watermark == "True":
@@ -103,10 +178,21 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
             f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}ENTROPY.pth.tar",
             map_location=device)
     else:
-        checkpoint = torch.load(
-            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
-            map_location=device)
-    state_dict = checkpoint['state_dict']
+        if user == 'ady':
+            checkpoint = torch.load(
+                f"/h/321/{user}/code/SimCLR/{args.dataset}/checkpoint/{args.dataset}{args.arch}SLepoch{epochs}.pth",
+                map_location=device)
+        else:
+            checkpoint = torch.load(
+                f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}{loss}TRAIN/{dataset}_checkpoint_{epochs}_{loss}.pth.tar",
+                map_location=device)
+    if 'net' in checkpoint:
+        key = 'net'
+    elif 'state_dict' in checkpoint:
+        key = 'state_dict'
+    else:
+        raise Exception("Missing key net of state dict in the checkpoint.")
+    state_dict = checkpoint[key]
     new_state_dict = {}
     # Remove head.
     for k in list(state_dict.keys()):
@@ -121,8 +207,8 @@ def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
-def load_stolen(epochs, loss, model, dataset, queries, device):
 
+def load_stolen(epochs, loss, model, dataset, queries, device):
     print("Loading stolen model: ")
 
     if args.head == "False":
@@ -131,7 +217,8 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
             map_location=device)
     else:
         checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar", map_location=device)
+            f"/checkpoint/{os.getenv('USER')}/SimCLR/{epochs}{args.arch}STEALHEAD/stolen_checkpoint_{epochs}_{loss}.pth.tar",
+            map_location=device)
 
     if args.defence == "True":
         checkpoint = torch.load(
@@ -163,44 +250,59 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
+
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
-                                  transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
+    train_dataset = datasets.STL10(
+        f"{data_path}/data/stl10", split='train',
+        download=download,
+        transform=transforms.Compose(
+            [transforms.Resize(32), transforms.ToTensor()]))
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test', download=download,
-                                  transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
+                              num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.STL10(
+        f"{data_path}/data/stl10", split='test',
+        download=download,
+        transform=transforms.Compose(
+            [transforms.Resize(32), transforms.ToTensor()]))
+    test_loader = DataLoader(test_dataset, batch_size=2 * batch_size,
+                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
 
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=True, download=download,
-                                  transform=transforms.ToTensor())
+
+def get_cifar10_data_loaders(download, shuffle=False,
+                             batch_size=args.batch_size):
+    train_dataset = datasets.CIFAR10(f"{data_path}/data/",
+                                     train=True, download=download,
+                                     transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=download,
-                                  transform=transforms.ToTensor())
+                              num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.CIFAR10(f"{data_path}/data/",
+                                    train=False, download=download,
+                                    transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,
                                            indxs)  # only select last 1000 samples to prevent overlap with queried samples.
     test_loader = DataLoader(test_dataset, batch_size=64,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
+                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
+
 
 def get_svhn_data_loaders(download, shuffle=False, batch_size=args.batch_size):
-    train_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='train', download=download,
+    train_dataset = datasets.SVHN(f"{data_path}/data/SVHN",
+                                  split='train', download=download,
                                   transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                            num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='test', download=download,
-                                  transform=transforms.ToTensor())
+                              num_workers=0, drop_last=False, shuffle=shuffle)
+    test_dataset = datasets.SVHN(f"{data_path}/data/SVHN",
+                                 split='test', download=download,
+                                 transform=transforms.ToTensor())
     indxs = list(range(len(test_dataset) - 1000, len(test_dataset)))
     test_dataset = torch.utils.data.Subset(test_dataset,
                                            indxs)  # only select last 1000 samples to prevent overlap with queried samples.
     test_loader = DataLoader(test_dataset, batch_size=64,
-                            num_workers=2, drop_last=False, shuffle=shuffle)
+                             num_workers=2, drop_last=False, shuffle=shuffle)
     return train_loader, test_loader
+
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
@@ -219,32 +321,34 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-
-
-
 if args.modeltype == "stolen":
     if args.head == "False":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        log_dir = f"{prefix}/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     else:
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
+        log_dir = f"{prefix}/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}STEALHEAD/"
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}{args.losstype}.log'
     if args.defence == "True":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
+        log_dir = f"{prefix}/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}DEFENCE/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
     if args.datasetsteal == "imagenet":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
+        log_dir = f"{prefix}/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
         logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}IMAGENET.log'
 else:
     if args.dataset == "imagenet":
         args.arch = "resnet50"
     # else:
     #     args.arch = "resnet34"
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
+    log_dir = f"{prefix}/checkpoint/{os.getenv('USER')}/SimCLR/{args.epochstrain}{args.arch}{args.losstype}TRAIN/"
     logname = f'testing{args.modeltype}{args.dataset_test}.log'
+
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+
 if args.clear == "True":
     if os.path.exists(os.path.join(log_dir, logname)):
         os.remove(os.path.join(log_dir, logname))
+
 logging.basicConfig(
     filename=os.path.join(log_dir, logname),
     level=logging.DEBUG)
@@ -252,36 +356,54 @@ logging.basicConfig(
 if args.arch == 'resnet18':
     model = ResNet18(num_classes=10).to(device)
 elif args.arch == 'resnet34':
-    model = ResNet34( num_classes=10).to(device)
+    model = ResNet34(num_classes=10).to(device)
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
 
+if device == 'cuda':
+    model = torch.nn.DataParallel(model)
+    cudnn.benchmark = True
+
 if args.modeltype == "victim":
-    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
-                                         device=device)
+    # model = load_victim(args.epochstrain, args.dataset, model, args.losstype,
+    #                     args.watermark, args.entropy,
+    #                     device=device)
+    model = load_victim_encoder(args.epochstrain, args.dataset, model,
+                                args.losstype,
+                                args.watermark, args.entropy,
+                                device=device)
     print("Evaluating victim")
 else:
-    model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal, args.num_queries,
+    model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal,
+                        args.num_queries,
                         device=device)
     print("Evaluating stolen model")
 
 if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=False)
 elif args.dataset_test == 'stl10':
-    train_loader, test_loader = get_stl10_data_loaders(download=False)
+    train_loader, test_loader = get_stl10_data_loaders(download=True)
 elif args.dataset_test == "svhn":
     train_loader, test_loader = get_svhn_data_loaders(download=False)
 
+# reset parameters
+# model.fc.reset_parameters()
+
 # freeze all layers but the last fc (can try by training all layers)
 for name, param in model.named_parameters():
-    if name not in ['fc.weight', 'fc.bias', 'fc.0.weight', 'fc.0.bias']: # the imagenet model has fc.0 for the last layer
+    if name not in ['fc.weight', 'fc.bias', 'fc.0.weight',
+                    'fc.0.bias']:  # the imagenet model has fc.0 for the last layer
         param.requires_grad = False
+    else:
+        print('required grad for param name: ', name)
+        param.requires_grad = True
 
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
 if args.modeltype == "victim":
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4,
+                                 weight_decay=0.0008)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 else:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
@@ -291,7 +413,8 @@ epochs = 100
 
 ## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
 
-logging.info(f"Evaluating {args.modeltype} model on {args.dataset_test} dataset. Model trained using {args.losstype}.")
+logging.info(
+    f"Evaluating {args.modeltype} model on {args.dataset_test} dataset. Model trained using {args.losstype}.")
 logging.info(f"Args: {args}")
 for epoch in range(epochs):
     top1_train_accuracy = 0
@@ -307,7 +430,7 @@ for epoch in range(epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        if (counter+1) * x_batch.shape[0] >= args.num_labeled:
+        if (counter + 1) * x_batch.shape[0] >= args.num_labeled:
             break
 
     top1_train_accuracy /= (counter + 1)
@@ -319,18 +442,21 @@ for epoch in range(epochs):
 
         logits = model(x_batch)
 
-        top1, top5 = accuracy(logits, y_batch, topk=(1,5))
+        top1, top5 = accuracy(logits, y_batch, topk=(1, 5))
         top1_accuracy += top1[0]
         top5_accuracy += top5[0]
 
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
-    print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+    print(
+        f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
     logging.debug(
         f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
 if args.save == "True":
     if args.modeltype == "stolen":
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
+        torch.save(model.state_dict(),
+                   f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
     else:
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+        torch.save(model.state_dict(),
+                   f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
