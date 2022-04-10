@@ -44,11 +44,20 @@ parser.add_argument('--modeloutput', default='logits', type=str,
                     help='Type of victim model access.', choices=['logits', 'labels'])
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
+parser.add_argument('--lr', '--learning-rate', default=3e-4, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.5, type=float,
                     help='momentum')
+parser.add_argument('--mode', default='standard', type=str,
+                    help='Type of stealing (knockoff / standard)', choices=['knockoff', 'standard'])
+parser.add_argument('--victimtype', default='simclr', type=str,
+                    help='Type of victim (simclr / supervised)', choices=['simclr', 'supervised'])
 args = parser.parse_args()
+
+if args.victimtype == "supervised":
+    args.arch = "resnet18"
+if args.mode == "knockoff":
+    args.lr = 0.01
 
 unlabeled_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
                                   transform=transforms.transforms.Compose([
@@ -156,9 +165,12 @@ elif args.arch == 'resnet50':
     stolen_model = ResNet50(num_classes=10)
     victim_model = ResNet50(num_classes=10)
 
-
-checkpoint2 = torch.load(
-    f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+if args.victimtype == "simclr":
+    checkpoint2 = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+else:
+    checkpoint2 = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_cifar10.pth.tar")
 
 victim_model.load_state_dict(checkpoint2)  # load victim model
 
@@ -208,31 +220,68 @@ adaptive_loader2 = DataLoader(
     batch_size=64,
     shuffle=False)
 
-if args.modeloutput == "logits":
-    optimizer = optim.SGD(stolen_model.parameters(), 0.1)
-    trainknockoff(stolen_model, adaptive_dataset,
-                  batch_size=64,
-                  criterion_train=soft_cross_entropy,
-                  criterion_test=soft_cross_entropy,
-                  testloader=test_loader,
-                  device=device, num_workers=2, lr=args.lr,
-                  momentum=args.momentum, lr_step=30, lr_gamma=0.1,
-                  epochs=100, log_interval=100,
-                  checkpoint_suffix='', optimizer=optimizer,
-                  scheduler=None,
-                  writer=None, victimmodel=victim_model)
+if args.mode == "knockoff":
+    if args.modeloutput == "logits":
+        optimizer = optim.SGD(stolen_model.parameters(), 0.1)
+        trainknockoff(stolen_model, adaptive_dataset,
+                      batch_size=64,
+                      criterion_train=soft_cross_entropy,
+                      criterion_test=soft_cross_entropy,
+                      testloader=test_loader,
+                      device=device, num_workers=2, lr=args.lr,
+                      momentum=args.momentum, lr_step=30, lr_gamma=0.1,
+                      epochs=100, log_interval=100,
+                      checkpoint_suffix='', optimizer=optimizer,
+                      scheduler=None,
+                      writer=None, victimmodel=victim_model)
 
+    else:
+        optimizer = optim.SGD(stolen_model.parameters(), 0.1)
+        trainknockoff(stolen_model, adaptive_dataset,
+                      batch_size=64,
+                      testloader=test_loader,
+                      device=device, num_workers=2, lr=args.lr,
+                      momentum=args.momentum, lr_step=30, lr_gamma=0.1,
+                      epochs=100, log_interval=100,
+                      checkpoint_suffix='', optimizer=optimizer,
+                      scheduler=None,
+                      writer=None, victimmodel=victim_model)
 else:
-    optimizer = optim.SGD(stolen_model.parameters(), 0.1)
-    trainknockoff(stolen_model, adaptive_dataset,
-                  batch_size=64,
-                  testloader=test_loader,
-                  device=device, num_workers=2, lr=args.lr,
-                  momentum=args.momentum, lr_step=30, lr_gamma=0.1,
-                  epochs=100, log_interval=100,
-                  checkpoint_suffix='', optimizer=optimizer,
-                  scheduler=None,
-                  writer=None, victimmodel=victim_model)
+    optimizer = torch.optim.Adam(stolen_model.parameters(), lr=args.lr,
+                                 weight_decay=0.0008)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    for epoch in range(args.epochs):
+        top1_train_accuracy = 0
+        for counter, (x_batch, y_batch) in enumerate(adaptive_loader2):
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
+
+            logits = stolen_model(x_batch)
+            loss = criterion(logits, y_batch)
+            top1 = accuracy(logits, y_batch, topk=(1,))
+            top1_train_accuracy += top1[0]
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        top1_train_accuracy /= (counter + 1)
+        top1_accuracy = 0
+        top5_accuracy = 0
+        for counter, (x_batch, y_batch) in enumerate(test_loader):
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
+
+            logits = stolen_model(x_batch)
+
+            top1, top5 = accuracy(logits, y_batch, topk=(1, 5))
+            top1_accuracy += top1[0]
+            top5_accuracy += top5[0]
+
+        top1_accuracy /= (counter + 1)
+        top5_accuracy /= (counter + 1)
+        print(
+            f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
 
 

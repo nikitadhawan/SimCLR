@@ -154,5 +154,5 @@ def train_model(model, trainset, batch_size=64, criterion_train=None, criterion_
             best_test_acc = max(best_test_acc, test_acc)
             best_test_acc2 = max(best_test_acc2, test_acc2)
 
-    torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/knockoff/stolenknockoff.pth.tar")
-    print("Stolen Knockoff Model saved.")
+    # torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/knockoff/stolenknockoff.pth.tar")
+    # print("Stolen Knockoff Model saved.")
