@@ -1,0 +1,111 @@
+ssh://ady@localhost:3310/h/321/ady/anaconda3/envs/simclr/bin/python -u /h/321/ady/code/SimCLR/cifar10/linear_eval.py
+Using device: cuda
+==> Resuming from checkpoint..
+best acc:  95.48  start epoch:  196
+Evaluating victim
+Files already downloaded and verified
+Files already downloaded and verified
+required grad for param name:  fc.weight
+required grad for param name:  fc.bias
+Epoch 0	Top1 Train accuracy 42.04733657836914	Top1 Test accuracy: 70.15380859375	Top5 test acc: 95.41748046875
+Epoch 1	Top1 Train accuracy 72.54021453857422	Top1 Test accuracy: 74.677734375	Top5 test acc: 97.080078125
+Epoch 2	Top1 Train accuracy 74.91383361816406	Top1 Test accuracy: 75.380859375	Top5 test acc: 97.61962890625
+Epoch 3	Top1 Train accuracy 75.55606842041016	Top1 Test accuracy: 75.6103515625	Top5 test acc: 97.94921875
+Epoch 4	Top1 Train accuracy 75.82720184326172	Top1 Test accuracy: 75.75927734375	Top5 test acc: 98.11279296875
+Epoch 5	Top1 Train accuracy 76.13970184326172	Top1 Test accuracy: 75.90576171875	Top5 test acc: 98.3203125
+Epoch 6	Top1 Train accuracy 76.19829559326172	Top1 Test accuracy: 75.93994140625	Top5 test acc: 98.43017578125
+Epoch 7	Top1 Train accuracy 76.23735809326172	Top1 Test accuracy: 76.1669921875	Top5 test acc: 98.43017578125
+Epoch 8	Top1 Train accuracy 76.43038177490234	Top1 Test accuracy: 76.1669921875	Top5 test acc: 98.4130859375
+Epoch 9	Top1 Train accuracy 76.5452651977539	Top1 Test accuracy: 76.26953125	Top5 test acc: 98.44482421875
+Epoch 10	Top1 Train accuracy 76.7796401977539	Top1 Test accuracy: 76.5478515625	Top5 test acc: 98.46923828125
+Epoch 11	Top1 Train accuracy 76.88188934326172	Top1 Test accuracy: 76.60888671875	Top5 test acc: 98.486328125
+Epoch 12	Top1 Train accuracy 77.11397552490234	Top1 Test accuracy: 76.70654296875	Top5 test acc: 98.486328125
+Epoch 13	Top1 Train accuracy 77.11626434326172	Top1 Test accuracy: 76.84814453125	Top5 test acc: 98.5107421875
+Epoch 14	Top1 Train accuracy 77.13579559326172	Top1 Test accuracy: 76.84814453125	Top5 test acc: 98.53515625
+Epoch 15	Top1 Train accuracy 77.21392059326172	Top1 Test accuracy: 76.94580078125	Top5 test acc: 98.54248046875
+Epoch 16	Top1 Train accuracy 77.27251434326172	Top1 Test accuracy: 77.060546875	Top5 test acc: 98.5791015625
+Epoch 17	Top1 Train accuracy 77.40923309326172	Top1 Test accuracy: 77.109375	Top5 test acc: 98.5986328125
+Epoch 18	Top1 Train accuracy 77.44829559326172	Top1 Test accuracy: 77.119140625	Top5 test acc: 98.6181640625
+Epoch 19	Top1 Train accuracy 77.50688934326172	Top1 Test accuracy: 77.1875	Top5 test acc: 98.6181640625
+Epoch 20	Top1 Train accuracy 77.58272552490234	Top1 Test accuracy: 77.255859375	Top5 test acc: 98.6376953125
+Epoch 21	Top1 Train accuracy 77.6390151977539	Top1 Test accuracy: 77.29248046875	Top5 test acc: 98.62548828125
+Epoch 22	Top1 Train accuracy 77.6585464477539	Top1 Test accuracy: 77.353515625	Top5 test acc: 98.62548828125
+Epoch 23	Top1 Train accuracy 77.6585464477539	Top1 Test accuracy: 77.373046875	Top5 test acc: 98.6376953125
+Epoch 24	Top1 Train accuracy 77.6976089477539	Top1 Test accuracy: 77.38525390625	Top5 test acc: 98.6376953125
+Epoch 25	Top1 Train accuracy 77.7757339477539	Top1 Test accuracy: 77.4169921875	Top5 test acc: 98.61328125
+Epoch 26	Top1 Train accuracy 77.8515625	Top1 Test accuracy: 77.47314453125	Top5 test acc: 98.6376953125
+Epoch 27	Top1 Train accuracy 77.8515625	Top1 Test accuracy: 77.47314453125	Top5 test acc: 98.6376953125
+Epoch 28	Top1 Train accuracy 77.87109375	Top1 Test accuracy: 77.5341796875	Top5 test acc: 98.62548828125
+Epoch 29	Top1 Train accuracy 77.8883285522461	Top1 Test accuracy: 77.55126953125	Top5 test acc: 98.60107421875
+Epoch 30	Top1 Train accuracy 77.8297348022461	Top1 Test accuracy: 77.5146484375	Top5 test acc: 98.61328125
+Epoch 31	Top1 Train accuracy 77.9273910522461	Top1 Test accuracy: 77.50244140625	Top5 test acc: 98.61328125
+Epoch 32	Top1 Train accuracy 77.9664535522461	Top1 Test accuracy: 77.5146484375	Top5 test acc: 98.61328125
+Epoch 33	Top1 Train accuracy 77.9469223022461	Top1 Test accuracy: 77.57080078125	Top5 test acc: 98.61328125
+Epoch 34	Top1 Train accuracy 77.9469223022461	Top1 Test accuracy: 77.56591796875	Top5 test acc: 98.61328125
+Epoch 35	Top1 Train accuracy 78.0055160522461	Top1 Test accuracy: 77.5732421875	Top5 test acc: 98.62548828125
+Epoch 36	Top1 Train accuracy 78.0445785522461	Top1 Test accuracy: 77.51708984375	Top5 test acc: 98.62548828125
+Epoch 37	Top1 Train accuracy 78.0836410522461	Top1 Test accuracy: 77.54150390625	Top5 test acc: 98.62548828125
+Epoch 38	Top1 Train accuracy 78.10546875	Top1 Test accuracy: 77.54150390625	Top5 test acc: 98.6376953125
+Epoch 39	Top1 Train accuracy 78.14453125	Top1 Test accuracy: 77.529296875	Top5 test acc: 98.66943359375
+Epoch 40	Top1 Train accuracy 78.18359375	Top1 Test accuracy: 77.54150390625	Top5 test acc: 98.662109375
+Epoch 41	Top1 Train accuracy 78.203125	Top1 Test accuracy: 77.56591796875	Top5 test acc: 98.662109375
+Epoch 42	Top1 Train accuracy 78.1640625	Top1 Test accuracy: 77.578125	Top5 test acc: 98.67431640625
+Epoch 43	Top1 Train accuracy 78.203125	Top1 Test accuracy: 77.61474609375	Top5 test acc: 98.6865234375
+Epoch 44	Top1 Train accuracy 78.2421875	Top1 Test accuracy: 77.59521484375	Top5 test acc: 98.6865234375
+Epoch 45	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.587890625	Top5 test acc: 98.6865234375
+Epoch 46	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.57568359375	Top5 test acc: 98.69140625
+Epoch 47	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.5634765625	Top5 test acc: 98.69140625
+Epoch 48	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.55126953125	Top5 test acc: 98.69140625
+Epoch 49	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.5634765625	Top5 test acc: 98.69140625
+Epoch 50	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.60009765625	Top5 test acc: 98.69140625
+Epoch 51	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.6123046875	Top5 test acc: 98.7158203125
+Epoch 52	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.64892578125	Top5 test acc: 98.72802734375
+Epoch 53	Top1 Train accuracy 78.2421875	Top1 Test accuracy: 77.64892578125	Top5 test acc: 98.72802734375
+Epoch 54	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.6806640625	Top5 test acc: 98.740234375
+Epoch 55	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.69287109375	Top5 test acc: 98.740234375
+Epoch 56	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.705078125	Top5 test acc: 98.72802734375
+Epoch 57	Top1 Train accuracy 78.2421875	Top1 Test accuracy: 77.75390625	Top5 test acc: 98.72802734375
+Epoch 58	Top1 Train accuracy 78.2421875	Top1 Test accuracy: 77.76611328125	Top5 test acc: 98.72802734375
+Epoch 59	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.79052734375	Top5 test acc: 98.740234375
+Epoch 60	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.79052734375	Top5 test acc: 98.740234375
+Epoch 61	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.79052734375	Top5 test acc: 98.740234375
+Epoch 62	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.79052734375	Top5 test acc: 98.7646484375
+Epoch 63	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.81494140625	Top5 test acc: 98.7646484375
+Epoch 64	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.783203125	Top5 test acc: 98.740234375
+Epoch 65	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.77099609375	Top5 test acc: 98.740234375
+Epoch 66	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.7587890625	Top5 test acc: 98.740234375
+Epoch 67	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.783203125	Top5 test acc: 98.740234375
+Epoch 68	Top1 Train accuracy 78.3203125	Top1 Test accuracy: 77.79541015625	Top5 test acc: 98.740234375
+Epoch 69	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.763671875	Top5 test acc: 98.72802734375
+Epoch 70	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.763671875	Top5 test acc: 98.72802734375
+Epoch 71	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.77587890625	Top5 test acc: 98.72802734375
+Epoch 72	Top1 Train accuracy 78.30078125	Top1 Test accuracy: 77.763671875	Top5 test acc: 98.72802734375
+Epoch 73	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.75146484375	Top5 test acc: 98.740234375
+Epoch 74	Top1 Train accuracy 78.26171875	Top1 Test accuracy: 77.75146484375	Top5 test acc: 98.72802734375
+Epoch 75	Top1 Train accuracy 78.28125	Top1 Test accuracy: 77.77587890625	Top5 test acc: 98.72802734375
+Epoch 76	Top1 Train accuracy 78.3375473022461	Top1 Test accuracy: 77.77587890625	Top5 test acc: 98.7158203125
+Epoch 77	Top1 Train accuracy 78.3375473022461	Top1 Test accuracy: 77.79541015625	Top5 test acc: 98.72802734375
+Epoch 78	Top1 Train accuracy 78.3375473022461	Top1 Test accuracy: 77.83203125	Top5 test acc: 98.7158203125
+Epoch 79	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.83203125	Top5 test acc: 98.7158203125
+Epoch 80	Top1 Train accuracy 78.3570785522461	Top1 Test accuracy: 77.83203125	Top5 test acc: 98.7158203125
+Epoch 81	Top1 Train accuracy 78.3375473022461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.7158203125
+Epoch 82	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.86865234375	Top5 test acc: 98.6962890625
+Epoch 83	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.6962890625
+Epoch 84	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 85	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.83203125	Top5 test acc: 98.6962890625
+Epoch 86	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 87	Top1 Train accuracy 78.3180160522461	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.68408203125
+Epoch 88	Top1 Train accuracy 78.3570785522461	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.6962890625
+Epoch 89	Top1 Train accuracy 78.4156723022461	Top1 Test accuracy: 77.86865234375	Top5 test acc: 98.6962890625
+Epoch 90	Top1 Train accuracy 78.4156723022461	Top1 Test accuracy: 77.86865234375	Top5 test acc: 98.6962890625
+Epoch 91	Top1 Train accuracy 78.4352035522461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 92	Top1 Train accuracy 78.4352035522461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 93	Top1 Train accuracy 78.4352035522461	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.6962890625
+Epoch 94	Top1 Train accuracy 78.4156723022461	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 95	Top1 Train accuracy 78.47196960449219	Top1 Test accuracy: 77.84423828125	Top5 test acc: 98.6962890625
+Epoch 96	Top1 Train accuracy 78.49150085449219	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.6962890625
+Epoch 97	Top1 Train accuracy 78.51103210449219	Top1 Test accuracy: 77.8564453125	Top5 test acc: 98.6962890625
+Epoch 98	Top1 Train accuracy 78.47196960449219	Top1 Test accuracy: 77.83203125	Top5 test acc: 98.70849609375
+Epoch 99	Top1 Train accuracy 78.47196960449219	Top1 Test accuracy: 77.880859375	Top5 test acc: 98.70849609375
+
+Process finished with exit code 0
