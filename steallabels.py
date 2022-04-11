@@ -84,6 +84,11 @@ if args.dataset_test == "cifar10":
                             num_workers=2, drop_last=False, shuffle=False)
     # query_dataset = dataset.get_test_dataset("cifar10",
     #                                          1)
+    query_dataset = datasets.CIFAR10(
+        f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
+        transform=transforms.transforms.Compose([
+            transforms.ToTensor(),
+        ]))
 
 elif args.dataset_test == "stl10":
     test_dataset = datasets.STL10(
@@ -97,6 +102,11 @@ elif args.dataset_test == "stl10":
                                        transform=transforms.Compose(
                                            [transforms.Resize(32),
                                             transforms.ToTensor()]))
+    query_dataset = datasets.CIFAR10(
+        f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
+        transform=transforms.transforms.Compose([
+            transforms.ToTensor(),
+        ]))
 elif args.dataset_test == "svhn":
     unlabeled_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='test', download=False,
                                       transform=transforms.transforms.Compose([
@@ -106,6 +116,11 @@ elif args.dataset_test == "svhn":
     test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
     test_loader = DataLoader(test_dataset, batch_size=64,
                             num_workers=2, drop_last=False, shuffle=False)
+    query_dataset = datasets.CIFAR10(
+        f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
+        transform=transforms.transforms.Compose([
+            transforms.ToTensor(),
+        ]))
 
 # Helper functions and classes
 def accuracy(output, target, topk=(1,)):
@@ -274,7 +289,7 @@ print(f"Victim accuracy: {top1_accuracy} %")
 
 # stolen dataset formed by querying the victim model
 if args.dataset_test == "stl10":
-    unlabeled_subset = Subset(unlabeled_dataset,
+    unlabeled_subset = Subset(query_dataset,
                               list(range(0, 9000)))
     unlabeled_subloader = DataLoader(
         unlabeled_subset,
@@ -282,7 +297,7 @@ if args.dataset_test == "stl10":
         shuffle=False)
 else:
     #unlabeled_subset = Subset(query_dataset, list(range(0, len(query_dataset) - 1000)))
-    unlabeled_subset = Subset(unlabeled_dataset,
+    unlabeled_subset = Subset(query_dataset,
                               list(range(0, 9000)))
     unlabeled_subloader = DataLoader(
                     unlabeled_subset,

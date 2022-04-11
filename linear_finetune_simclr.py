@@ -86,6 +86,19 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     #assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
+def load_victim(epochs, loss, model, dataset, queries, device):
+    # load victim to compute fidelity accuracy
+    print("Loading victim model: ")
+
+    state_dict = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{dataset}.pth.tar",
+        map_location=device)
+
+    log = model.load_state_dict(state_dict, strict=False)
+    #assert log.missing_keys == ['fc.weight', 'fc.bias']
+    return model
+
+
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
                                   transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
@@ -158,6 +171,7 @@ logging.basicConfig(
 
 if args.arch == 'resnet18':
     model = ResNet18(num_classes=10).to(device)
+    victim_model = ResNet18(num_classes=10).to(device)
 elif args.arch == 'resnet34':
     model = ResNet34( num_classes=10).to(device)
 elif args.arch == 'resnet50':
@@ -165,6 +179,8 @@ elif args.arch == 'resnet50':
 
 
 model = load_stolen(args.epochs, args.losstype, model, args.dataset_test, args.num_queries,
+                    device=device)
+victim_model = load_stolen(args.epochs, args.losstype, victim_model, args.dataset_test, args.num_queries,
                     device=device)
 print("Finetuning stolen model")
 
@@ -214,21 +230,27 @@ for epoch in range(epochs):
     top1_train_accuracy /= (counter + 1)
     top1_accuracy = 0
     top5_accuracy = 0
+    fidelity_accuracy = 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
 
         logits = model(x_batch)
+        victim_logits = victim_model(x_batch)
+        victim_targets = victim_logits.argmax(axis=1)
 
         top1, top5 = accuracy(logits, y_batch, topk=(1,5))
+        fid = accuracy(logits, victim_targets, topk=(1,))
         top1_accuracy += top1[0]
         top5_accuracy += top5[0]
+        fidelity_accuracy += fid[0]
 
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
-    print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+    fidelity_accuracy /= (counter + 1)
+    print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}\t Fidelity: {fidelity_accuracy.item()}")
     logging.debug(
-        f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+        f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}\t Fidelity: {fidelity_accuracy.item()}")
 
 # if args.save == "True":
 #     torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/finetuned_stolen_linear_{args.dataset_test}.pth.tar")
