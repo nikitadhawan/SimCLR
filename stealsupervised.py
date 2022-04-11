@@ -155,15 +155,31 @@ def main():
 
     victim_model = ResNetSimCLRV2(base_model=args.arch,
                                   out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
-    checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset}.pth.tar",
-        map_location=args.device)
-    state_dict = checkpoint
-    new_state_dict = state_dict.copy()
-    for k in list(state_dict.keys()):
-        if k.startswith('backbone.fc'):
-            del new_state_dict[k]
+
+    # First victim model:
+    # checkpoint = torch.load(
+    #     f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset}.pth.tar",
+    #     map_location=args.device)
+    # state_dict = checkpoint
+    # new_state_dict = state_dict.copy()
+    # for k in list(state_dict.keys()):
+    #     if k.startswith('backbone.fc'):
+    #         del new_state_dict[k]
+    # victim_model.load_state_dict(new_state_dict, strict=False)
+
+
+    # Second victim model:
+    checkpoint2 = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_aug_ckpt.pth")[
+        "net"]
+    new_state_dict = {}
+    for k in list(checkpoint2.keys()):
+        if k in ["module.linear.weight", "module.linear.bias"]:
+            pass
+        else:
+            new_state_dict[k[len("module."):]] = checkpoint2[k]
     victim_model.load_state_dict(new_state_dict, strict=False)
+
 
     if args.stolenhead == "False":
         model = ResNetSimCLRV2(base_model=args.archstolen, out_dim=args.out_dim, loss=args.losstype, include_mlp = False)

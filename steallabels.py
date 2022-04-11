@@ -40,13 +40,13 @@ parser.add_argument('--epochstrain', default=200, type=int, metavar='N',
                     help='number of epochs victim was trained with')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
-parser.add_argument('--modeloutput', default='logits', type=str,
+parser.add_argument('--modeloutput', default='labels', type=str,
                     help='Type of victim model access.', choices=['logits', 'labels'])
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
 parser.add_argument('--lr', '--learning-rate', default=3e-4, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
-parser.add_argument('--momentum', default=0.5, type=float,
+parser.add_argument('--momentum', default=0.9, type=float,
                     help='momentum')
 parser.add_argument('--mode', default='standard', type=str,
                     help='Type of stealing (knockoff / standard)', choices=['knockoff', 'standard'])
@@ -60,10 +60,19 @@ if args.mode == "knockoff":
     args.lr = 0.01
 
 if args.dataset_test == "cifar10":
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                             (0.2023, 0.1994, 0.2010)),
+    ])
     unlabeled_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
                                       transform=transforms.transforms.Compose([
                                       transforms.ToTensor(),
                                       ]))
+    # With normalization:
+    # unlabeled_dataset = datasets.CIFAR10(
+    #     f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
+    #     transform=transform_test)
     indxs = list(range(len(unlabeled_dataset) - 1000, len(unlabeled_dataset)))
     test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
     test_loader = DataLoader(test_dataset, batch_size=64,
@@ -190,20 +199,26 @@ elif args.arch == 'resnet50':
 if args.victimtype == "simclr":
     checkpoint2 = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
-    victim_model.load_state_dict(checkpoint2)  # load victim model
+    victim_model.load_state_dict(checkpoint2)  # load victim model (simclr downstream)
 else:
-    checkpoint2 = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset_test}.pth.tar")["state_dict"]
-    victim_model.load_state_dict(checkpoint2)  # load victim model
+    # First model
     # checkpoint2 = torch.load(
-    #     f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_ckpt.pth")["net"]
-    # new_state_dict = {}
-    # for k in list(checkpoint2.keys()):
-    #     if k in ["module.linear.weight", "module.linear.bias"]:
-    #         new_state_dict["fc." + k[len("module.linear."):]] = checkpoint2[k]
-    #     else:
-    #         new_state_dict[k[len("module."):]] = checkpoint2[k]
-    # victim_model.load_state_dict(new_state_dict)
+    #     f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset_test}.pth.tar")["state_dict"]
+    #victim_model.load_state_dict(checkpoint2)  # load victim model
+    #
+    # Second and third models
+    # checkpoint2 = torch.load(
+    #     f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_ckpt.pth")["net"] # with augmentations
+    checkpoint2 = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_aug_ckpt.pth")[
+        "net"]
+    new_state_dict = {}
+    for k in list(checkpoint2.keys()):
+        if k in ["module.linear.weight", "module.linear.bias"]:
+            new_state_dict["fc." + k[len("module.linear."):]] = checkpoint2[k]
+        else:
+            new_state_dict[k[len("module."):]] = checkpoint2[k]
+    victim_model.load_state_dict(new_state_dict)
 
 
 
@@ -297,8 +312,11 @@ if args.mode == "knockoff":
                       scheduler=None,
                       writer=None, victimmodel=victim_model)
 else:
-    optimizer = torch.optim.Adam(stolen_model.parameters(), lr=args.lr,
-                                 weight_decay=0.0008)
+    # optimizer = torch.optim.Adam(stolen_model.parameters(), lr=args.lr,
+    #                              weight_decay=0.0008)
+    optimizer = torch.optim.SGD(stolen_model.parameters(), lr=args.lr,
+                      momentum=args.momentum, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
     criterion = torch.nn.CrossEntropyLoss().to(device)
     for epoch in range(args.epochs):
         top1_train_accuracy = 0
@@ -333,6 +351,7 @@ else:
         print(
             f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
+        scheduler.step()
 
 
 
