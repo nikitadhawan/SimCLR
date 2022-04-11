@@ -1,4 +1,4 @@
-# Steal linear SimCLR model (saved after lin evaluation) using standard knockoff method.
+# Steal linear SimCLR model (saved after lin evaluation) using standard stealing method.
 # Measure the accuracy of the resulting stolen model and then compare with downstream accuracy of model that was stolen with embeddings.
 
 import torch
@@ -59,14 +59,36 @@ if args.victimtype == "supervised":
 if args.mode == "knockoff":
     args.lr = 0.01
 
-unlabeled_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
-                                  transform=transforms.transforms.Compose([
-                                  transforms.ToTensor(),
-                                  ]))
-indxs = list(range(len(unlabeled_dataset) - 1000, len(unlabeled_dataset)))
-test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
-test_loader = DataLoader(test_dataset, batch_size=64,
-                        num_workers=2, drop_last=False, shuffle=False)
+if args.dataset_test == "cifar10":
+    unlabeled_dataset = datasets.CIFAR10(f"/ssd003/home/{os.getenv('USER')}/data/", train=False, download=False,
+                                      transform=transforms.transforms.Compose([
+                                      transforms.ToTensor(),
+                                      ]))
+    indxs = list(range(len(unlabeled_dataset) - 1000, len(unlabeled_dataset)))
+    test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=False)
+elif args.dataset_test == "stl10":
+    test_dataset = datasets.STL10(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
+        download=False,
+        transform=transforms.Compose(
+            [transforms.Resize(32), transforms.ToTensor()]))
+    test_loader = DataLoader(test_dataset, batch_size=2 * 64,
+                             num_workers=2, drop_last=False, shuffle=False)
+    unlabeled_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='unlabeled', download=False,
+                                       transform=transforms.Compose(
+                                           [transforms.Resize(32),
+                                            transforms.ToTensor()]))
+elif args.dataset_test == "svhn":
+    unlabeled_dataset = datasets.SVHN(f"/ssd003/home/{os.getenv('USER')}/data/SVHN", split='test', download=False,
+                                      transform=transforms.transforms.Compose([
+                                      transforms.ToTensor(),
+                                      ]))
+    indxs = list(range(len(unlabeled_dataset) - 1000, len(unlabeled_dataset)))
+    test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
+    test_loader = DataLoader(test_dataset, batch_size=64,
+                            num_workers=2, drop_last=False, shuffle=False)
 
 # Helper functions and classes
 def accuracy(output, target, topk=(1,)):
@@ -168,11 +190,22 @@ elif args.arch == 'resnet50':
 if args.victimtype == "simclr":
     checkpoint2 = torch.load(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+    victim_model.load_state_dict(checkpoint2)  # load victim model
 else:
     checkpoint2 = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_cifar10.pth.tar")
+        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset_test}.pth.tar")["state_dict"]
+    victim_model.load_state_dict(checkpoint2)  # load victim model
+    # checkpoint2 = torch.load(
+    #     f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_ckpt.pth")["net"]
+    # new_state_dict = {}
+    # for k in list(checkpoint2.keys()):
+    #     if k in ["module.linear.weight", "module.linear.bias"]:
+    #         new_state_dict["fc." + k[len("module.linear."):]] = checkpoint2[k]
+    #     else:
+    #         new_state_dict[k[len("module."):]] = checkpoint2[k]
+    # victim_model.load_state_dict(new_state_dict)
 
-victim_model.load_state_dict(checkpoint2)  # load victim model
+
 
 victim_model.to(device)
 victim_model.eval()
@@ -181,28 +214,45 @@ stolen_model.to(device)
 ## Evaluating victim model
 
 with torch.no_grad():
-    for inputs, targets in test_loader:
-        inputs, targets = inputs.to(device), targets.to(device)
-        outputs = victim_model(inputs)
-        # loss = criterion(outputs, targets)
-        correct = 0
-        total = 0
-        # test_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+    top1_accuracy = 0
+    for counter, (x_batch, y_batch) in enumerate(test_loader):
+        x_batch = x_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        logits = victim_model(x_batch)
+
+        top1, top5 = accuracy(logits, y_batch, topk=(1, 5))
+        top1_accuracy += top1[0]
+    top1_accuracy /= (counter + 1)
+    correct = 0
+    total = 0
+    # for batch_idx, (inputs, targets) in enumerate(test_loader):
+    #     inputs, targets = inputs.to(device), targets.to(device)
+    #     outputs = victim_model(inputs)
+    #
+    #     _, predicted = outputs.max(1)
+    #     total += targets.size(0)
+    #     correct += predicted.eq(targets).sum().item()
+    #
+    # print(f"Accuracy: {100. * correct/total}")
 
 
-
-acc = 100. * correct / total
-print(f"Victim accuracy: {acc} %")
+print(f"Victim accuracy: {top1_accuracy} %")
 
 # stolen dataset formed by querying the victim model
-unlabeled_subset = Subset(unlabeled_dataset, list(range(0, len(unlabeled_dataset) - 1000)))
-unlabeled_subloader = DataLoader(
-                unlabeled_subset,
-                batch_size=64,
-                shuffle=False)
+if args.dataset_test == "stl10":
+    unlabeled_subset = Subset(unlabeled_dataset,
+                              list(range(0, 9000)))
+    unlabeled_subloader = DataLoader(
+        unlabeled_subset,
+        batch_size=64,
+        shuffle=False)
+else:
+    unlabeled_subset = Subset(unlabeled_dataset, list(range(0, len(unlabeled_dataset) - 1000)))
+    unlabeled_subloader = DataLoader(
+                    unlabeled_subset,
+                    batch_size=64,
+                    shuffle=False)
 predicted_logits = get_prediction(victim_model, unlabeled_subloader)
 all_labels = predicted_logits.argmax(axis=1).cpu()
 all_probs = F.softmax(predicted_logits, dim=1).cpu().detach()

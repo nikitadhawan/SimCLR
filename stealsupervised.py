@@ -156,7 +156,7 @@ def main():
     victim_model = ResNetSimCLRV2(base_model=args.arch,
                                   out_dim=args.out_dim,loss=args.lossvictim, include_mlp = False).to(args.device)
     checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_cifar10.pth.tar",
+        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/victim_supervised_{args.dataset}.pth.tar",
         map_location=args.device)
     state_dict = checkpoint
     new_state_dict = state_dict.copy()
