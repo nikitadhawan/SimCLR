@@ -1,3 +1,5 @@
+# Finetune stolen supervised model from simclr downstream victim.
+
 import torch
 import sys
 import numpy as np
@@ -24,9 +26,7 @@ parser.add_argument('-folder-name', metavar='DIR', default='test',
 parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--dataset-test', default='cifar10',
-                    help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('--datasetsteal', default='cifar10',
-                    help='dataset used for querying the victim', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
+                    help='dataset to run downstream task on (also used for querying)', choices=['stl10', 'cifar10', 'svhn'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=50000,type=int,
@@ -37,7 +37,7 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of epochs stolen model was trained with')
 parser.add_argument('--num_queries', default=9000, type=int, metavar='N',
                     help='Number of queries to steal the model.')
-parser.add_argument('--lr', default=1e-4, type=float, # maybe try other lrs
+parser.add_argument('--lr', default=1e-4, type=float, # maybe try other lrs  1e-4
                     help='learning rate to train the model with.')
 parser.add_argument('--modeltype', default='stolen', type=str,
                     help='Type of model to evaluate', choices=['victim', 'stolen'])
@@ -67,56 +67,23 @@ parser.add_argument('--entropy', default='False', type=str,
 args = parser.parse_args()
 
 
-def load_victim(epochs, dataset, model, loss, watermark, entropy, device):
-
-    print("Loading victim model: ")
-
-    state_dict = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/supervised_resnet18_cifar10_aug_ckpt.pth")[
-        "net"]
-    new_state_dict = {}
-    # Remove head.
-    for k in list(state_dict.keys()):
-        if k in ["module.linear.weight", "module.linear.bias"]:
-            pass
-        else:
-            new_state_dict[k[len("module."):]] = state_dict[k]
-    log = model.load_state_dict(new_state_dict, strict=False)
-
-    assert log.missing_keys == ['fc.weight', 'fc.bias']
-    return model
-
 
 def load_stolen(epochs, loss, model, dataset, queries, device):
 
     print("Loading stolen model: ")
 
-    checkpoint = torch.load(
-        f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/{epochs}{args.arch}{loss}STEAL/stolen_checkpoint_{queries}_{loss}_{dataset}.pth.tar",
+    state_dict = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{dataset}.pth.tar",
         map_location=device)
+    # load full model.
 
-    state_dict = checkpoint['state_dict']
-    new_state_dict = {}
-    # Remove head.
-    if loss == "symmetrized":
-        for k in list(state_dict.keys()):
-            if k.startswith('encoder.'):
-                if k.startswith('encoder') and not k.startswith('encoder.fc'):
-                    # remove prefix
-                    new_state_dict[k[len("encoder."):]] = state_dict[k]
-            else:
-                new_state_dict[k] = state_dict[k]
-    else:
-        for k in list(state_dict.keys()):
-            if k.startswith('backbone.'):
-                if k.startswith('backbone') and not k.startswith('backbone.fc'):
-                    # remove prefix
-                    new_state_dict[k[len("backbone."):]] = state_dict[k]
-            else:
-                new_state_dict[k] = state_dict[k]
+    # new_state_dict = {}
+    # for k in list(state_dict.keys()):
+    #     if not k.startswith('fc.'):
+    #         new_state_dict[k] = state_dict[k]
 
-    log = model.load_state_dict(new_state_dict, strict=False)
-    assert log.missing_keys == ['fc.weight', 'fc.bias']
+    log = model.load_state_dict(state_dict, strict=False)
+    #assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
@@ -178,13 +145,9 @@ def accuracy(output, target, topk=(1,)):
 
 
 
-if args.modeltype == "stolen":
-    if args.head == "False":
-        log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/{args.epochs}{args.arch}{args.losstype}STEAL/"  # save logs here.
-        logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
-else:
-    log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLRsupervised/"
-    logname = f'testing{args.modeltype}{args.dataset_test}{args.num_queries}.log'
+
+log_dir = f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/"
+logname = f'testing{args.dataset_test}.log'
 
 if args.clear == "True":
     if os.path.exists(os.path.join(log_dir, logname)):
@@ -200,14 +163,10 @@ elif args.arch == 'resnet34':
 elif args.arch == 'resnet50':
     model = ResNet50(num_classes=10).to(device)
 
-if args.modeltype == "victim":
-    model = load_victim(args.epochstrain, args.dataset, model, args.losstype,args.watermark,args.entropy,
-                                         device=device)
-    print("Evaluating victim")
-else:
-    model = load_stolen(args.epochs, args.losstype, model, args.datasetsteal, args.num_queries,
-                        device=device)
-    print("Evaluating stolen model")
+
+model = load_stolen(args.epochs, args.losstype, model, args.dataset_test, args.num_queries,
+                    device=device)
+print("Finetuning stolen model")
 
 if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=False)
@@ -224,13 +183,11 @@ for name, param in model.named_parameters():
 parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 assert len(parameters) == 2  # fc.weight, fc.bias
 
-if args.modeltype == "victim":
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
-    criterion = torch.nn.CrossEntropyLoss().to(device)
-else:
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
-                                 weight_decay=0.0008)
-    criterion = torch.nn.CrossEntropyLoss().to(device)
+
+
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                             weight_decay=0.0008)
+criterion = torch.nn.CrossEntropyLoss().to(device)
 epochs = 100
 
 ## Trains the representation model with a linear classifier to measure the accuracy on the test set labels of the victim/stolen model
@@ -273,8 +230,5 @@ for epoch in range(epochs):
     logging.debug(
         f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
-if args.save == "True":
-    if args.modeltype == "stolen":
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
-    else:
-        torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{args.dataset_test}.pth.tar")
+# if args.save == "True":
+#     torch.save(model.state_dict(), f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/finetuned_stolen_linear_{args.dataset_test}.pth.tar")

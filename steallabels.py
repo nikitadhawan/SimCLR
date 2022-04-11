@@ -1,6 +1,8 @@
 # Steal linear SimCLR model (saved after lin evaluation) using standard stealing method.
 # Measure the accuracy of the resulting stolen model and then compare with downstream accuracy of model that was stolen with embeddings.
 
+# Code can also be used to alternatively steal a supervised victim model (using victimtype = supervised)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,6 +22,8 @@ import logging
 from torchvision import datasets
 from knockoff import train_model as trainknockoff
 from knockoff import soft_cross_entropy
+from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
+    RegularDataset, WatermarkDataset
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("Using device:", device)
@@ -32,7 +36,7 @@ parser.add_argument('--dataset', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10', 'svhn', 'imagenet'])
 parser.add_argument('--dataset-test', default='cifar10',
                     help='dataset to run downstream task on', choices=['stl10', 'cifar10', 'svhn'])
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
         choices=['resnet18', 'resnet34', 'resnet50'], help='model architecture')
 parser.add_argument('-n', '--num-labeled', default=500,
                      help='Number of labeled batches to train on')
@@ -58,6 +62,7 @@ if args.victimtype == "supervised":
     args.arch = "resnet18"
 if args.mode == "knockoff":
     args.lr = 0.01
+dataset = ContrastiveLearningDataset(f"/ssd003/home/{os.getenv('USER')}/data")
 
 if args.dataset_test == "cifar10":
     transform_test = transforms.Compose([
@@ -77,6 +82,9 @@ if args.dataset_test == "cifar10":
     test_dataset = torch.utils.data.Subset(unlabeled_dataset, indxs)
     test_loader = DataLoader(test_dataset, batch_size=64,
                             num_workers=2, drop_last=False, shuffle=False)
+    # query_dataset = dataset.get_test_dataset("cifar10",
+    #                                          1)
+
 elif args.dataset_test == "stl10":
     test_dataset = datasets.STL10(
         f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='test',
@@ -120,7 +128,11 @@ def get_prediction(model, unlabeled_dataloader):
     initialized = False
     with torch.no_grad():
         for data, _ in unlabeled_dataloader:
-            data = data.cuda()
+            try:
+                data = data.cuda()
+            except:
+                data = data[0]
+                data = data.cuda()
             output = model(data)
             if not initialized:
                 result = output
@@ -188,13 +200,19 @@ class DatasetProbs(Dataset):
 if args.arch == 'resnet18':
     stolen_model = ResNet18(num_classes=10)
 
-    victim_model = ResNet18(num_classes=10)
+    #victim_model = ResNet18(num_classes=10)
 elif args.arch == 'resnet34':
     stolen_model = ResNet34(num_classes=10).to(device)
-    victim_model = ResNet34(num_classes=10).to(device)
+    #victim_model = ResNet34(num_classes=10).to(device)
 elif args.arch == 'resnet50':
     stolen_model = ResNet50(num_classes=10)
-    victim_model = ResNet50(num_classes=10)
+    #victim_model = ResNet50(num_classes=10)
+
+if args.victimtype == "simclr":
+    victim_model = ResNet34(num_classes=10).to(device)
+else:
+    victim_model = ResNet18(num_classes=10)
+
 
 if args.victimtype == "simclr":
     checkpoint2 = torch.load(
@@ -263,7 +281,9 @@ if args.dataset_test == "stl10":
         batch_size=64,
         shuffle=False)
 else:
-    unlabeled_subset = Subset(unlabeled_dataset, list(range(0, len(unlabeled_dataset) - 1000)))
+    #unlabeled_subset = Subset(query_dataset, list(range(0, len(query_dataset) - 1000)))
+    unlabeled_subset = Subset(unlabeled_dataset,
+                              list(range(0, 9000)))
     unlabeled_subloader = DataLoader(
                     unlabeled_subset,
                     batch_size=64,
@@ -312,17 +332,22 @@ if args.mode == "knockoff":
                       scheduler=None,
                       writer=None, victimmodel=victim_model)
 else:
-    # optimizer = torch.optim.Adam(stolen_model.parameters(), lr=args.lr,
-    #                              weight_decay=0.0008)
-    optimizer = torch.optim.SGD(stolen_model.parameters(), lr=args.lr,
-                      momentum=args.momentum, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+    if args.victimtype == "simclr":
+        optimizer = torch.optim.Adam(stolen_model.parameters(), lr=args.lr,
+                                     weight_decay=0.0008)
+    else:
+        optimizer = torch.optim.SGD(stolen_model.parameters(), lr=args.lr,
+                          momentum=args.momentum, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
     criterion = torch.nn.CrossEntropyLoss().to(device)
     for epoch in range(args.epochs):
         top1_train_accuracy = 0
         for counter, (x_batch, y_batch) in enumerate(adaptive_loader2):
+            if type(x_batch) == list:
+                x_batch = x_batch[0]
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
+
 
             logits = stolen_model(x_batch)
             loss = criterion(logits, y_batch)
@@ -351,7 +376,8 @@ else:
         print(
             f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
-        scheduler.step()
+        #scheduler.step()
 
-
-
+    if args.victimtype == "simclr":
+        torch.save(stolen_model.state_dict(),
+                   f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/stolen_linear_{args.dataset_test}.pth.tar")
