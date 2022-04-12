@@ -163,6 +163,18 @@ def load_stolen(epochs, loss, model, dataset, queries, device):
     assert log.missing_keys == ['fc.weight', 'fc.bias']
     return model
 
+def load_victim_linear(epochs, loss, model, dataset, queries, device):
+    # load victim to compute fidelity accuracy
+    print("Loading victim model: ")
+
+    state_dict = torch.load(
+        f"/checkpoint/{os.getenv('USER')}/SimCLR/downstream/victim_linear_{dataset}.pth.tar",
+        map_location=device)
+
+    log = model.load_state_dict(state_dict, strict=False)
+    #assert log.missing_keys == ['fc.weight', 'fc.bias']
+    return model
+
 def get_stl10_data_loaders(download, shuffle=False, batch_size=args.batch_size):
     train_dataset = datasets.STL10(f"/checkpoint/{os.getenv('USER')}/SimCLR/stl10", split='train', download=download,
                                   transform=transforms.Compose([transforms.Resize(32), transforms.ToTensor()]))
@@ -265,6 +277,10 @@ else:
                         device=device)
     print("Evaluating stolen model")
 
+    victim_linear = ResNet18(num_classes=10).to(device)
+    victim_linear = load_victim_linear(args.epochs, args.losstype, victim_linear, args.dataset_test, args.num_queries,
+                        device=device)
+
 if args.dataset_test == 'cifar10':
     train_loader, test_loader = get_cifar10_data_loaders(download=False)
 elif args.dataset_test == 'stl10':
@@ -313,11 +329,17 @@ for epoch in range(epochs):
     top1_train_accuracy /= (counter + 1)
     top1_accuracy = 0
     top5_accuracy = 0
+    fidelity_accuracy = 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
 
         logits = model(x_batch)
+        if args.modeltype == "stolen":
+            victim_logits = victim_linear(x_batch)
+            victim_targets = victim_logits.argmax(axis=1)
+            fid = accuracy(logits, victim_targets, topk=(1,))
+            fidelity_accuracy += fid[0]
 
         top1, top5 = accuracy(logits, y_batch, topk=(1,5))
         top1_accuracy += top1[0]
@@ -325,9 +347,16 @@ for epoch in range(epochs):
 
     top1_accuracy /= (counter + 1)
     top5_accuracy /= (counter + 1)
-    print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
-    logging.debug(
-        f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+    fidelity_accuracy /= (counter + 1)
+    if args.modeltype == "stolen":
+        print(f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}\tFidelity: {fidelity_accuracy.item()}")
+        logging.debug(
+            f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}\tFidelity: {fidelity_accuracy.item()}")
+    else:
+        print(
+            f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
+        logging.debug(
+            f"Epoch {epoch}\tTop1 Train accuracy {top1_train_accuracy.item()}\tTop1 Test accuracy: {top1_accuracy.item()}\tTop5 test acc: {top5_accuracy.item()}")
 
 if args.save == "True":
     if args.modeltype == "stolen":

@@ -180,7 +180,7 @@ elif args.arch == 'resnet50':
 
 model = load_stolen(args.epochs, args.losstype, model, args.dataset_test, args.num_queries,
                     device=device)
-victim_model = load_stolen(args.epochs, args.losstype, victim_model, args.dataset_test, args.num_queries,
+victim_model = load_victim(args.epochs, args.losstype, victim_model, args.dataset_test, args.num_queries,
                     device=device)
 print("Finetuning stolen model")
 
