@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset, \
     RegularDataset, WatermarkDataset
-from models.resnet_simclr import ResNetSimCLRV2, SimSiam, WatermarkMLP, HeadSimCLR
+from models.resnet_simclr import SimSiam, WatermarkMLP, HeadSimCLR
 from models.resnet import ResNetSimCLRV2 as ResNetSimCLRNEW
 from models.resnet_wider import resnet50rep, resnet50rep2, resnet50x1
 from utils import load_victim, load_watermark, accuracy, print_args
@@ -122,7 +122,7 @@ if args.dataset == "imagenet":  # manually set parameters in the case of imagene
     args.arch = "resnet50"
     args.archstolen = "resnet50"
     args.datasetsteal = "imagenet"
-    args.num_queries = 100000
+    args.num_queries = 250000
     args.losstype = "infonce"
     size = 224
 else:
@@ -298,7 +298,7 @@ if args.dataset == "imagenet":
     del state_dict
 
 else:
-    stolen_model = ResNetSimCLRV2(base_model=args.arch, out_dim=128, loss=None,
+    stolen_model = ResNetSimCLRNEW(base_model=args.arch, out_dim=128, loss=None,
                                   include_mlp=False).to(device)
     # mse loss for victim for first tests.
     checkpoint = torch.load(
@@ -335,9 +335,9 @@ else:
     random_model2 = ResNetSimCLRNEW(base_model="resnet34", out_dim=128, loss=None,
                                   include_mlp=False).to(
         device)
-    random_model2 = load_victim(200, "svhn", random_model2,
-                               "resnet34", "infonce",
-                               device=device, discard_mlp=True)  # This is the model which was trained on the first 40000 samples from the training set.
+    random_model2 = load_victim(50, "cifar10", random_model2,
+                               "resnet18", "infonce",
+                               device=device, discard_mlp=True)
 
                 
 victim_model.eval()
